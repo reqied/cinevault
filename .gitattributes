@@ -1,0 +1,54 @@
+# Автоматически определять текстовые файлы
+* text=auto
+
+# Исходный код — LF
+*.ts      text eol=lf
+*.tsx     text eol=lf
+*.js      text eol=lf
+*.jsx     text eol=lf
+*.rs      text eol=lf
+*.css     text eol=lf
+*.scss    text eol=lf
+*.html    text eol=lf
+*.json    text eol=lf
+*.toml    text eol=lf
+*.yaml    text eol=lf
+*.yml     text eol=lf
+*.md      text eol=lf
+*.sql     text eol=lf
+*.env.example text eol=lf
+*.gitignore text eol=lf
+*.gitattributes text eol=lf
+
+# Windows-скрипты — CRLF
+*.bat     text eol=crlf
+*.cmd     text eol=crlf
+*.ps1     text eol=crlf
+
+# Unix-скрипты — LF
+*.sh      text eol=lf
+
+# Бинарные файлы
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.webp    binary
+*.ico     binary
+*.icns    binary
+*.svg     text eol=lf
+
+*.mp4     binary
+*.mkv     binary
+*.avi     binary
+*.mov     binary
+*.webm    binary
+
+*.db      binary
+*.sqlite  binary
+*.sqlite3 binary
+
+*.woff    binary
+*.woff2   binary
+*.ttf     binary
+*.otf     binary
