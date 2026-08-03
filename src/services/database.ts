@@ -219,6 +219,7 @@ export async function getLibraryFolders(): Promise<LibraryFolder[]> {
   }));
 }
 
+
 export async function deleteLibraryFolder(
   libraryFolderId: number,
 ): Promise<void> {
@@ -238,5 +239,35 @@ export async function deleteLibraryFolder(
       WHERE id = ?
     `,
     [libraryFolderId],
+  );
+}
+
+export async function deleteMissingMediaFiles(
+  libraryFolderId: number,
+  existingPaths: string[],
+): Promise<void> {
+  const db = await getDatabase();
+
+  if (existingPaths.length === 0) {
+    await db.execute(
+      `
+        DELETE FROM media
+        WHERE library_folder_id = ?
+      `,
+      [libraryFolderId],
+    );
+
+    return;
+  }
+
+  const placeholders = existingPaths.map(() => "?").join(", ");
+
+  await db.execute(
+    `
+      DELETE FROM media
+      WHERE library_folder_id = ?
+        AND path NOT IN (${placeholders})
+    `,
+    [libraryFolderId, ...existingPaths],
   );
 }
