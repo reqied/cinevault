@@ -48,6 +48,7 @@ struct MediaFile {
 
 fn parse_media_name(
     file_name: &str,
+    folder_type: &str,
 ) -> (String, Option<u16>, String, Option<u16>, Option<u16>) {
     let stem = Path::new(file_name)
         .file_stem()
@@ -181,10 +182,20 @@ fn parse_media_name(
         cleaned
     };
 
-    let media_type = if season.is_some() && episode.is_some() {
-        "episode"
-    } else {
-        "movie"
+    let media_type = match folder_type {
+        "movies" => {
+            season = None;
+            episode = None;
+            "movie"
+        }
+        "series" => "episode",
+        _ => {
+            if season.is_some() && episode.is_some() {
+                "episode"
+            } else {
+                "movie"
+            }
+        }
     };
 
     (
@@ -254,7 +265,16 @@ async fn search_movie_metadata(
 }
 
 #[tauri::command]
-fn scan_media_folder(folder_path: String) -> Result<Vec<MediaFile>, String> {
+fn scan_media_folder(
+    folder_path: String,
+    folder_type: String,
+) -> Result<Vec<MediaFile>, String> {
+    if !matches!(
+        folder_type.as_str(),
+        "movies" | "series" | "mixed"
+    ) {
+        return Err("Неизвестный тип папки".to_string());
+    }
     let folder = Path::new(&folder_path);
 
     if !folder.exists() {
@@ -290,8 +310,8 @@ fn scan_media_folder(folder_path: String) -> Result<Vec<MediaFile>, String> {
             .map_err(|error| format!("Не удалось прочитать файл: {error}"))?;
 
         let name = entry.file_name().to_string_lossy().to_string();
-        let (title, year, media_type, season, episode) = parse_media_name(&name);
-
+        let (title, year, media_type, season, episode) =
+        parse_media_name(&name, &folder_type);
         files.push(MediaFile {
             name,
             path: path.to_string_lossy().to_string(),

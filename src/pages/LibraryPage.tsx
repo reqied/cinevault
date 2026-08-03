@@ -107,7 +107,7 @@ export function LibraryPage() {
     setError("");
 
     try {
-      const result = await selectAndScanFolder();
+      const result = await selectAndScanFolder(folderType);
 
       if (!result) {
         return;

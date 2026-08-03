@@ -61,7 +61,10 @@ export function SettingsPage() {
     setMessage("");
 
     try {
-      const files = await scanFolder(folder.path);
+      const files = await scanFolder(
+        folder.path,
+        folder.folderType,
+      );
 
       await saveMediaFiles(files, folder.id);
 
