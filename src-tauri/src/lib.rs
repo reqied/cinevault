@@ -489,6 +489,45 @@ pub fn run() {
         "#,
         kind: MigrationKind::Up,
     },
+    Migration {
+        version: 9,
+        description: "create_watchlist",
+        sql: r#"
+            CREATE TABLE IF NOT EXISTS watchlist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                media_type TEXT NOT NULL,
+                tmdb_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                original_title TEXT,
+                year INTEGER,
+                poster_path TEXT,
+                backdrop_path TEXT,
+                overview TEXT,
+                is_watched INTEGER NOT NULL DEFAULT 0,
+                linked_media_id INTEGER,
+                linked_series_id INTEGER,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    
+                UNIQUE(media_type, tmdb_id),
+    
+                FOREIGN KEY(linked_media_id)
+                    REFERENCES media(id)
+                    ON DELETE SET NULL,
+    
+                FOREIGN KEY(linked_series_id)
+                    REFERENCES series(id)
+                    ON DELETE SET NULL
+            );
+    
+            CREATE INDEX IF NOT EXISTS idx_watchlist_created_at
+                ON watchlist(created_at);
+    
+            CREATE INDEX IF NOT EXISTS idx_watchlist_is_watched
+                ON watchlist(is_watched);
+        "#,
+        kind: MigrationKind::Up,
+    },
     ];
 
     tauri::Builder::default()

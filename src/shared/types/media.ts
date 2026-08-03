@@ -171,3 +171,36 @@ export type LibraryItem =
       series: SeriesGroup;
     };
 
+    export type WatchlistMediaType = "movie" | "series";
+
+    export type WatchlistItem = {
+      id: number;
+      mediaType: WatchlistMediaType;
+      tmdbId: number;
+      title: string;
+      originalTitle: string | null;
+      year: number | null;
+      posterPath: string | null;
+      backdropPath: string | null;
+      overview: string | null;
+      isWatched: boolean;
+      linkedMediaId: number | null;
+      linkedSeriesId: number | null;
+      createdAt: string;
+    };
+    
+    export type WatchlistRow = {
+      id: number;
+      media_type: WatchlistMediaType;
+      tmdb_id: number;
+      title: string;
+      original_title: string | null;
+      year: number | null;
+      poster_path: string | null;
+      backdrop_path: string | null;
+      overview: string | null;
+      is_watched: number;
+      linked_media_id: number | null;
+      linked_series_id: number | null;
+      created_at: string;
+    };

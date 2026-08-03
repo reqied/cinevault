@@ -8,6 +8,8 @@ import type {
   SeriesGroup,
   SeriesMetadata,
   SeasonMetadata,
+  WatchlistItem,
+  WatchlistRow,
 } from "../shared/types/media";
 
 let database: Database | null = null;
@@ -796,4 +798,75 @@ export async function saveSeasonMetadata(
       ],
     );
   }
+}
+
+export async function getWatchlist(): Promise<WatchlistItem[]> {
+  const db = await getDatabase();
+
+  const rows = await db.select<WatchlistRow[]>(`
+    SELECT
+      id,
+      media_type,
+      tmdb_id,
+      title,
+      original_title,
+      year,
+      poster_path,
+      backdrop_path,
+      overview,
+      is_watched,
+      linked_media_id,
+      linked_series_id,
+      created_at
+    FROM watchlist
+    ORDER BY created_at DESC
+  `);
+
+  return rows.map((row) => ({
+    id: row.id,
+    mediaType: row.media_type,
+    tmdbId: row.tmdb_id,
+    title: row.title,
+    originalTitle: row.original_title,
+    year: row.year,
+    posterPath: row.poster_path,
+    backdropPath: row.backdrop_path,
+    overview: row.overview,
+    isWatched: Boolean(row.is_watched),
+    linkedMediaId: row.linked_media_id,
+    linkedSeriesId: row.linked_series_id,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function setWatchlistWatched(
+  id: number,
+  isWatched: boolean,
+): Promise<void> {
+  const db = await getDatabase();
+
+  await db.execute(
+    `
+      UPDATE watchlist
+      SET
+        is_watched = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `,
+    [Number(isWatched), id],
+  );
+}
+
+export async function deleteWatchlistItem(
+  id: number,
+): Promise<void> {
+  const db = await getDatabase();
+
+  await db.execute(
+    `
+      DELETE FROM watchlist
+      WHERE id = ?
+    `,
+    [id],
+  );
 }
