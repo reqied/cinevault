@@ -1,6 +1,12 @@
 export type MediaType = "movie" | "episode";
 export type LibraryFolderType = "movies" | "series" | "mixed";
 
+export type MetadataStatus =
+  | "pending"
+  | "processing"
+  | "completed"
+  | "failed";
+
 export type LibraryFolder = {
   id: number;
   path: string;
@@ -46,7 +52,9 @@ export type MediaFile = {
   overview?: string | null;
   originalTitle?: string | null;
   releaseDate?: string | null;
-
+  metadataStatus?: MetadataStatus;
+  metadataAttempts?: number;
+  metadataError?: string | null;
 };
 
 export type MovieMetadata = {
@@ -77,4 +85,7 @@ export type MediaRow = {
   overview: string | null;
   original_title: string | null;
   release_date: string | null;
+  metadata_status: MetadataStatus;
+  metadata_attempts: number;
+  metadata_error: string | null;
 };

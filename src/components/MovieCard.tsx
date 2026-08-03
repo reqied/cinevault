@@ -69,6 +69,23 @@ import {
           <CardContent>
             <Typography fontWeight={600} noWrap>
               {file.title}
+              {file.metadataStatus === "processing" && (
+  <Typography variant="caption" color="text.secondary">
+    Загружаем данные...
+  </Typography>
+)}
+
+{file.metadataStatus === "pending" && (
+  <Typography variant="caption" color="text.secondary">
+    Ожидает обработки
+  </Typography>
+)}
+
+{file.metadataStatus === "failed" && (
+  <Typography variant="caption" color="error">
+    Метаданные не найдены
+  </Typography>
+)}
             </Typography>
   
             <Typography variant="body2" color="text.secondary" noWrap>

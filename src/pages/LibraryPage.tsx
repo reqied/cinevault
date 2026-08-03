@@ -1,48 +1,93 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Alert,
   Box,
   Button,
   CircularProgress,
+  LinearProgress,
+  Stack,
   Typography,
 } from "@mui/material";
-import { Add } from "@mui/icons-material";
+import AddIcon from "@mui/icons-material/Add";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import { MovieCard } from "../components/MovieCard";
 import { selectAndScanFolder } from "../services/library";
 import {
   getMediaFiles,
+  getMetadataProgress,
+  retryFailedMetadata,
   saveLibraryFolder,
   saveMediaFiles,
-  saveMovieMetadata,
+  type MetadataProgress,
 } from "../services/database";
-import { searchMovieMetadata } from "../services/tmdb";
+import { runMetadataQueue } from "../services/metadataQueue";
 import type { MediaFile } from "../shared/types/media";
+
+const emptyProgress: MetadataProgress = {
+  total: 0,
+  pending: 0,
+  processing: 0,
+  completed: 0,
+  failed: 0,
+};
 
 export function LibraryPage() {
   const [files, setFiles] = useState<MediaFile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [progress, setProgress] =
+    useState<MetadataProgress>(emptyProgress);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
   const [error, setError] = useState("");
 
+  const loadLibrary = useCallback(
+    async (showLoader = false) => {
+      if (showLoader) {
+        setInitialLoading(true);
+      }
+
+      try {
+        const [storedFiles, metadataProgress] = await Promise.all([
+          getMediaFiles(),
+          getMetadataProgress(),
+        ]);
+
+        setFiles(storedFiles);
+        setProgress(metadataProgress);
+      } catch (value) {
+        setError(String(value));
+      } finally {
+        if (showLoader) {
+          setInitialLoading(false);
+        }
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
-    loadLibrary();
-  }, []);
+    void loadLibrary(true);
+  }, [loadLibrary]);
 
-  async function loadLibrary() {
-    setLoading(true);
-    setError("");
-
-    try {
-      const storedFiles = await getMediaFiles();
-      setFiles(storedFiles);
-    } catch (value) {
-      setError(String(value));
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    function handleLibraryChanged() {
+      void loadLibrary();
     }
-  }
+
+    window.addEventListener(
+      "cinevault:library-changed",
+      handleLibraryChanged,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "cinevault:library-changed",
+        handleLibraryChanged,
+      );
+    };
+  }, [loadLibrary]);
 
   async function handleSelectFolder() {
-    setLoading(true);
+    setImporting(true);
     setError("");
 
     try {
@@ -56,29 +101,40 @@ export function LibraryPage() {
         result.folderPath,
         "mixed",
       );
-      
+
       await saveMediaFiles(result.files, libraryFolderId);
-      const importedFiles = await getMediaFiles();
-
-      for (const file of importedFiles) {
-        if (file.mediaType !== "movie" || file.tmdbId || !file.id) {
-          continue;
-        }
-
-        const metadata = await searchMovieMetadata(file.title, file.year);
-
-        if (metadata) {
-          await saveMovieMetadata(file.id, metadata);
-        }
-      }
-
       await loadLibrary();
+
+      void runMetadataQueue();
     } catch (value) {
       setError(String(value));
     } finally {
-      setLoading(false);
+      setImporting(false);
     }
   }
+
+  async function handleRetryFailed() {
+    setError("");
+
+    try {
+      await retryFailedMetadata();
+      await loadLibrary();
+      void runMetadataQueue();
+    } catch (value) {
+      setError(String(value));
+    }
+  }
+
+  const processedCount =
+    progress.completed + progress.failed;
+
+  const progressValue =
+    progress.total > 0
+      ? (processedCount / progress.total) * 100
+      : 0;
+
+  const queueActive =
+    progress.pending > 0 || progress.processing > 0;
 
   return (
     <Box>
@@ -87,18 +143,33 @@ export function LibraryPage() {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
+          gap: 3,
           mb: 4,
         }}
       >
-        <Typography variant="h4" fontWeight={700}>
-          Библиотека
-        </Typography>
+        <Box>
+          <Typography variant="h4" fontWeight={700}>
+            Библиотека
+          </Typography>
+
+          {files.length > 0 && (
+            <Typography color="text.secondary">
+              Файлов: {files.length}
+            </Typography>
+          )}
+        </Box>
 
         <Button
           variant="contained"
-          startIcon={loading ? <CircularProgress size={18} /> : <Add />}
+          startIcon={
+            importing ? (
+              <CircularProgress size={18} />
+            ) : (
+              <AddIcon />
+            )
+          }
           onClick={handleSelectFolder}
-          disabled={loading}
+          disabled={importing}
         >
           Добавить папку
         </Button>
@@ -110,34 +181,104 @@ export function LibraryPage() {
         </Alert>
       )}
 
-      {!loading && files.length === 0 && (
-        <Typography color="text.secondary">
-          В библиотеке пока нет видеофайлов.
-        </Typography>
-      )}
+      {progress.total > 0 && (
+        <Box sx={{ mb: 4 }}>
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="center"
+            sx={{ mb: 1 }}
+          >
+            <Typography variant="body2">
+              {queueActive
+                ? "Загрузка метаданных"
+                : "Обработка завершена"}
+            </Typography>
 
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))",
-          gap: 3,
-        }}
-      >
-        {files.map((file) => (
-          <MovieCard key={file.id ?? file.path} file={file} />
-        ))}
-      </Box>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+            >
+              {processedCount} / {progress.total}
+            </Typography>
+          </Stack>
 
-      {loading && (
-        <Box sx={{ display: "flex", justifyContent: "center", mt: 8 }}>
-          <CircularProgress />
+          <LinearProgress
+            variant="determinate"
+            value={progressValue}
+          />
+
+          <Stack
+            direction="row"
+            spacing={2}
+            alignItems="center"
+            sx={{ mt: 1 }}
+          >
+            <Typography
+              variant="caption"
+              color="text.secondary"
+            >
+              В очереди: {progress.pending}
+            </Typography>
+
+            <Typography
+              variant="caption"
+              color="text.secondary"
+            >
+              Обрабатывается: {progress.processing}
+            </Typography>
+
+            <Typography
+              variant="caption"
+              color="text.secondary"
+            >
+              Готово: {progress.completed}
+            </Typography>
+
+            {progress.failed > 0 && (
+              <Button
+                size="small"
+                color="warning"
+                startIcon={<RefreshIcon />}
+                onClick={handleRetryFailed}
+              >
+                Повторить ошибки: {progress.failed}
+              </Button>
+            )}
+          </Stack>
         </Box>
       )}
 
-      {!loading && files.length > 0 && (
-        <Typography color="text.secondary" sx={{ mt: 3 }}>
-          Найдено файлов: {files.length}
+      {initialLoading ? (
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "center",
+            mt: 8,
+          }}
+        >
+          <CircularProgress />
+        </Box>
+      ) : files.length === 0 ? (
+        <Typography color="text.secondary">
+          В библиотеке пока нет видеофайлов.
         </Typography>
+      ) : (
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns:
+              "repeat(auto-fill, minmax(190px, 1fr))",
+            gap: 3,
+          }}
+        >
+          {files.map((file) => (
+            <MovieCard
+              key={file.id ?? file.path}
+              file={file}
+            />
+          ))}
+        </Box>
       )}
     </Box>
   );

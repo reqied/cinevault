@@ -306,6 +306,19 @@ pub fn run() {
         "#,
         kind: MigrationKind::Up,
     },
+    Migration {
+        version: 4,
+        description: "add_metadata_queue_fields",
+        sql: r#"
+            ALTER TABLE media ADD COLUMN metadata_attempts INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE media ADD COLUMN metadata_error TEXT;
+            ALTER TABLE media ADD COLUMN metadata_updated_at TEXT;
+    
+            CREATE INDEX IF NOT EXISTS idx_media_metadata_status
+                ON media(metadata_status);
+        "#,
+        kind: MigrationKind::Up,
+    },
     ];
 
     tauri::Builder::default()
