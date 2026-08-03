@@ -92,14 +92,15 @@ import {
           left.seasonNumber - right.seasonNumber,
       );
   
-    function openEpisode(file: MediaFile) {
-      navigate("/media/details", {
-        state: {
-          file,
-        },
-      });
-    }
-  
+      function openEpisode(file: MediaFile) {
+        navigate("/media/details", {
+          state: {
+            file,
+            series,
+          },
+        });
+      }
+        
     return (
       <Box>
         <Button

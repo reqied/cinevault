@@ -13,10 +13,11 @@ import {
 } from "@mui/material";
 import { ArrowBack, PlayArrow } from "@mui/icons-material";
 import { useLocation, useNavigate } from "react-router";
-import type { MediaFile } from "../shared/types/media";
+import type { MediaFile, SeriesGroup } from "../shared/types/media";
 
 type LocationState = {
   file?: MediaFile;
+  series?: SeriesGroup;
 };
 
 const imageBaseUrl = "https://image.tmdb.org/t/p";
@@ -24,8 +25,7 @@ const imageBaseUrl = "https://image.tmdb.org/t/p";
 export function MediaDetailsPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { file } = (location.state ?? {}) as LocationState;
-
+  const { file, series } = (location.state ?? {}) as LocationState;
   if (!file) {
     return (
       <Alert severity="error">
@@ -33,14 +33,36 @@ export function MediaDetailsPage() {
       </Alert>
     );
   }
+  const title = series?.title ?? file.title;
 
-  const posterUrl = file.posterPath
-    ? `${imageBaseUrl}/w500${file.posterPath}`
-    : null;
+  const posterPath =
+    series?.posterPath ??
+    file.posterPath ??
+    null;
 
-  const backdropUrl = file.backdropPath
-    ? `${imageBaseUrl}/original${file.backdropPath}`
-    : null;
+  const backdropPath =
+    series?.backdropPath ??
+    file.backdropPath ??
+    null;
+
+  const overview =
+    series?.overview ??
+    file.overview ??
+    null;
+
+  const releaseYear =
+    series?.firstAirDate?.slice(0, 4) ??
+    series?.year ?? file.releaseDate?.slice(0, 4) ??
+    file.year ??
+    null;
+
+  const posterUrl = posterPath
+  ? `${imageBaseUrl}/w500${posterPath}`
+  : null;
+
+const backdropUrl = backdropPath
+  ? `${imageBaseUrl}/original${backdropPath}`
+  : null;
 
   return (
     <Box>
@@ -103,7 +125,7 @@ export function MediaDetailsPage() {
             <Box
               component="img"
               src={posterUrl}
-              alt={file.title}
+              alt={title}
               sx={{
                 width: "100%",
                 maxWidth: 300,
@@ -125,7 +147,7 @@ export function MediaDetailsPage() {
 
           <Box>
             <Typography variant="h3" fontWeight={700}>
-              {file.title}
+              {title}
             </Typography>
 
             {file.originalTitle && file.originalTitle !== file.title && (
@@ -138,16 +160,14 @@ export function MediaDetailsPage() {
               direction="row"
               spacing={1}
               useFlexGap
-              flexWrap="wrap"
-              sx={{ my: 2 }}
+              
+              sx={{ 
+                flexWrap: "wrap",
+                my: 2 }}
             >
               <Chip label={file.mediaType === "movie" ? "Фильм" : "Сериал"} />
 
-              {file.releaseDate && (
-                <Chip label={file.releaseDate.slice(0, 4)} />
-              )}
-
-              {!file.releaseDate && file.year && <Chip label={file.year} />}
+              {releaseYear && <Chip label={releaseYear} />}
 
               <Chip label={file.extension.toUpperCase()} />
             </Stack>
@@ -165,8 +185,7 @@ export function MediaDetailsPage() {
                 lineHeight: 1.7,
               }}
             >
-              {file.overview || "Описание отсутствует."}
-            </Typography>
+            {overview || "Описание отсутствует."}            </Typography>
 
             <Button
               variant="contained"
