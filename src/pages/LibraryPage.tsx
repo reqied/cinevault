@@ -44,7 +44,11 @@ const emptyProgress: MetadataProgress = {
   completed: 0,
   failed: 0,
 };
-import { updateSeriesMetadata } from "../services/seriesMetadata";
+import { updateSeriesMetadata} from "../services/seriesMetadata";
+import { updateSeasonMetadata } from "../services/seasonMetadata";
+void updateSeriesMetadata().then(() =>
+  updateSeasonMetadata(),
+);
 
 export function LibraryPage() {
   const [seriesGroups, setSeriesGroups] = useState<SeriesGroup[]>([]);

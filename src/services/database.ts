@@ -7,6 +7,7 @@ import type {
   MovieMetadata,
   SeriesGroup,
   SeriesMetadata,
+  SeasonMetadata,
 } from "../shared/types/media";
 
 let database: Database | null = null;
@@ -128,7 +129,13 @@ export async function getMediaFiles(): Promise<MediaFile[]> {
         release_date,
         metadata_status,
         metadata_attempts,
-        metadata_error
+        metadata_error,
+        episode_title,
+        episode_overview,
+        still_path,
+        air_date,
+        runtime,
+        episode_vote_average
       FROM media
       ORDER BY created_at DESC
     `,
@@ -156,6 +163,12 @@ export async function getMediaFiles(): Promise<MediaFile[]> {
     metadataStatus: row.metadata_status,
     metadataAttempts: row.metadata_attempts,
     metadataError: row.metadata_error,
+    episodeTitle: row.episode_title,
+    episodeOverview: row.episode_overview,
+    stillPath: row.still_path,
+    airDate: row.air_date,
+    runtime: row.runtime,
+    episodeVoteAverage: row.episode_vote_average,
   }));
 }
 
@@ -701,4 +714,86 @@ export async function saveSeriesUserData(
     `,
     [userRating, review, seriesId],
   );
+}
+
+export async function saveSeasonMetadata(
+  seriesId: number,
+  metadata: SeasonMetadata,
+): Promise<void> {
+  const db = await getDatabase();
+
+  await db.execute(
+    `
+      INSERT INTO seasons (
+        series_id,
+        season_number,
+        title,
+        poster_path,
+        overview,
+        air_date,
+        metadata_status
+      )
+      VALUES (?, ?, ?, ?, ?, ?, 'completed')
+      ON CONFLICT(series_id, season_number) DO UPDATE SET
+        title = excluded.title,
+        poster_path = excluded.poster_path,
+        overview = excluded.overview,
+        air_date = excluded.air_date,
+        metadata_status = 'completed',
+        metadata_error = NULL
+    `,
+    [
+      seriesId,
+      metadata.seasonNumber,
+      metadata.name,
+      metadata.posterPath,
+      metadata.overview,
+      metadata.airDate,
+    ],
+  );
+
+  const seasonRows = await db.select<{ id: number }[]>(
+    `
+      SELECT id
+      FROM seasons
+      WHERE series_id = ?
+        AND season_number = ?
+      LIMIT 1
+    `,
+    [seriesId, metadata.seasonNumber],
+  );
+
+  const seasonId = seasonRows[0]?.id;
+
+  for (const episode of metadata.episodes) {
+    await db.execute(
+      `
+        UPDATE media
+        SET
+          season_id = ?,
+          episode_title = ?,
+          episode_overview = ?,
+          still_path = ?,
+          air_date = ?,
+          runtime = ?,
+          episode_vote_average = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE series_id = ?
+          AND season = ?
+          AND episode = ?
+      `,
+      [
+        seasonId ?? null,
+        episode.name,
+        episode.overview,
+        episode.stillPath,
+        episode.airDate,
+        episode.runtime,
+        episode.voteAverage,
+        seriesId,
+        episode.seasonNumber,
+        episode.episodeNumber,
+      ],
+    );
+  }
 }

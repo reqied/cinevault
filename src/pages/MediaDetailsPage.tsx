@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   Alert,
   Box,
@@ -11,9 +12,15 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import CircularProgress from "@mui/material/CircularProgress";
 import { ArrowBack, PlayArrow } from "@mui/icons-material";
 import { useLocation, useNavigate } from "react-router";
-import type { MediaFile, SeriesGroup } from "../shared/types/media";
+import { getEpisodeDetails } from "../services/tmdb";
+import type {
+  EpisodeDetails,
+  MediaFile,
+  SeriesGroup,
+} from "../shared/types/media";
 
 type LocationState = {
   file?: MediaFile;
@@ -26,6 +33,61 @@ export function MediaDetailsPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { file, series } = (location.state ?? {}) as LocationState;
+
+  const [episodeDetails, setEpisodeDetails] =
+    useState<EpisodeDetails | null>(null);
+  const [episodeLoading, setEpisodeLoading] = useState(false);
+  const [episodeError, setEpisodeError] = useState("");
+
+  useEffect(() => {
+    if (
+      file?.mediaType !== "episode" ||
+      !series?.tmdbId ||
+      file.season === null ||
+      file.episode === null
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadEpisode() {
+      setEpisodeLoading(true);
+      setEpisodeError("");
+
+      try {
+        const details = await getEpisodeDetails(
+          series!.tmdbId!,
+          file!.season!,
+          file!.episode!,
+        );
+
+        if (!cancelled) {
+          setEpisodeDetails(details);
+        }
+      } catch (value) {
+        if (!cancelled) {
+          setEpisodeError(String(value));
+        }
+      } finally {
+        if (!cancelled) {
+          setEpisodeLoading(false);
+        }
+      }
+    }
+
+    void loadEpisode();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    file?.mediaType,
+    file?.season,
+    file?.episode,
+    series?.tmdbId,
+  ]);
+
   if (!file) {
     return (
       <Alert severity="error">
@@ -33,7 +95,20 @@ export function MediaDetailsPage() {
       </Alert>
     );
   }
+
   const title = series?.title ?? file.title;
+
+  const episodeTitle =
+    episodeDetails?.name ??
+    file.episodeTitle ??
+    `Серия ${file.episode}`;
+
+  const overview =
+    episodeDetails?.overview ||
+    file.episodeOverview ||
+    series?.overview ||
+    file.overview ||
+    null;
 
   const posterPath =
     series?.posterPath ??
@@ -41,28 +116,27 @@ export function MediaDetailsPage() {
     null;
 
   const backdropPath =
+    episodeDetails?.stillPath ??
+    file.stillPath ??
     series?.backdropPath ??
     file.backdropPath ??
     null;
 
-  const overview =
-    series?.overview ??
-    file.overview ??
-    null;
-
   const releaseYear =
+    episodeDetails?.airDate?.slice(0, 4) ??
     series?.firstAirDate?.slice(0, 4) ??
-    series?.year ?? file.releaseDate?.slice(0, 4) ??
+    series?.year ??
+    file.releaseDate?.slice(0, 4) ??
     file.year ??
     null;
 
   const posterUrl = posterPath
-  ? `${imageBaseUrl}/w500${posterPath}`
-  : null;
+    ? `${imageBaseUrl}/w500${posterPath}`
+    : null;
 
-const backdropUrl = backdropPath
-  ? `${imageBaseUrl}/original${backdropPath}`
-  : null;
+  const backdropUrl = backdropPath
+    ? `${imageBaseUrl}/original${backdropPath}`
+    : null;
 
   return (
     <Box>
@@ -150,22 +224,20 @@ const backdropUrl = backdropPath
               {title}
             </Typography>
 
-            {file.originalTitle && file.originalTitle !== file.title && (
-              <Typography color="text.secondary" sx={{ mt: 1 }}>
-                {file.originalTitle}
-              </Typography>
-            )}
-
             <Stack
               direction="row"
               spacing={1}
               useFlexGap
-              
-              sx={{ 
+              sx={{
                 flexWrap: "wrap",
-                my: 2 }}
+                my: 2,
+              }}
             >
-              <Chip label={file.mediaType === "movie" ? "Фильм" : "Сериал"} />
+              <Chip
+                label={
+                  file.mediaType === "movie" ? "Фильм" : "Сериал"
+                }
+              />
 
               {releaseYear && <Chip label={releaseYear} />}
 
@@ -173,9 +245,27 @@ const backdropUrl = backdropPath
             </Stack>
 
             {file.mediaType === "episode" && (
-              <Typography variant="h6" sx={{ mb: 2 }}>
-                Сезон {file.season}, серия {file.episode}
-              </Typography>
+              <>
+                <Typography variant="h5" sx={{ mb: 1 }}>
+                  {episodeLoading ? "Загрузка серии..." : episodeTitle}
+                </Typography>
+
+                <Typography color="text.secondary" sx={{ mb: 2 }}>
+                  Сезон {file.season}, серия {file.episode}
+                  {episodeDetails?.runtime
+                    ? ` · ${episodeDetails.runtime} мин`
+                    : ""}
+                  {episodeDetails?.voteAverage != null
+                    ? ` · TMDB ${episodeDetails.voteAverage.toFixed(1)}`
+                    : ""}
+                </Typography>
+
+                {episodeError && (
+                  <Alert severity="warning" sx={{ mb: 2 }}>
+                    Не удалось загрузить данные серии.
+                  </Alert>
+                )}
+              </>
             )}
 
             <Typography
@@ -185,12 +275,19 @@ const backdropUrl = backdropPath
                 lineHeight: 1.7,
               }}
             >
-            {overview || "Описание отсутствует."}            </Typography>
+              {overview || "Описание отсутствует."}
+            </Typography>
 
             <Button
               variant="contained"
               size="large"
-              startIcon={<PlayArrow />}
+              startIcon={
+                episodeLoading ? (
+                  <CircularProgress size={18} />
+                ) : (
+                  <PlayArrow />
+                )
+              }
             >
               Смотреть
             </Button>

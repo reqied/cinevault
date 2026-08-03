@@ -6,7 +6,17 @@ export type MetadataStatus =
   | "processing"
   | "completed"
   | "failed";
-
+export type EpisodeDetails = {
+  tmdbId: number;
+  name: string;
+  overview: string;
+  stillPath: string | null;
+  airDate: string | null;
+  runtime: number | null;
+  voteAverage: number;
+  seasonNumber: number;
+  episodeNumber: number;
+};
 export type LibraryFolder = {
   id: number;
   path: string;
@@ -55,6 +65,12 @@ export type MediaFile = {
   metadataStatus?: MetadataStatus;
   metadataAttempts?: number;
   metadataError?: string | null;
+  episodeTitle?: string | null;
+  episodeOverview?: string | null;
+  stillPath?: string | null;
+  airDate?: string | null;
+  runtime?: number | null;
+  episodeVoteAverage?: number | null;
 };
 
 export type MovieMetadata = {
@@ -88,6 +104,33 @@ export type MediaRow = {
   metadata_status: MetadataStatus;
   metadata_attempts: number;
   metadata_error: string | null;
+  episode_title: string | null;
+  episode_overview: string | null;
+  still_path: string | null;
+  air_date: string | null;
+  runtime: number | null;
+  episode_vote_average: number | null;
+};
+export type EpisodeMetadata = {
+  tmdbId: number;
+  name: string;
+  overview: string;
+  stillPath: string | null;
+  airDate: string | null;
+  episodeNumber: number;
+  seasonNumber: number;
+  runtime: number | null;
+  voteAverage: number;
+};
+
+export type SeasonMetadata = {
+  tmdbId: number;
+  name: string;
+  overview: string;
+  posterPath: string | null;
+  airDate: string | null;
+  seasonNumber: number;
+  episodes: EpisodeMetadata[];
 };
 
 export type SeriesMetadata = {

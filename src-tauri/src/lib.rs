@@ -472,6 +472,23 @@ pub fn run() {
         "#,
         kind: MigrationKind::Up,
     },
+    Migration {
+        version: 8,
+        description: "add_season_and_episode_metadata",
+        sql: r#"
+            ALTER TABLE media ADD COLUMN episode_title TEXT;
+            ALTER TABLE media ADD COLUMN episode_overview TEXT;
+            ALTER TABLE media ADD COLUMN still_path TEXT;
+            ALTER TABLE media ADD COLUMN air_date TEXT;
+            ALTER TABLE media ADD COLUMN runtime INTEGER;
+            ALTER TABLE media ADD COLUMN episode_vote_average REAL;
+    
+            ALTER TABLE seasons ADD COLUMN air_date TEXT;
+            ALTER TABLE seasons ADD COLUMN metadata_status TEXT NOT NULL DEFAULT 'pending';
+            ALTER TABLE seasons ADD COLUMN metadata_error TEXT;
+        "#,
+        kind: MigrationKind::Up,
+    },
     ];
 
     tauri::Builder::default()
@@ -482,7 +499,13 @@ pub fn run() {
                 .add_migrations("sqlite:cinevault.db", migrations)
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![scan_media_folder, search_movie_metadata, search_series_metadata])
+        .invoke_handler(tauri::generate_handler![
+                scan_media_folder, 
+                search_movie_metadata, 
+                search_series_metadata, 
+                get_season_metadata,
+                get_episode_details
+            ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -576,4 +599,167 @@ async fn search_series_metadata(
         first_air_date: series.first_air_date,
         vote_average: series.vote_average,
     }))
+}
+#[derive(Deserialize)]
+struct TmdbSeasonDetails {
+    id: u64,
+    name: String,
+    overview: String,
+    poster_path: Option<String>,
+    air_date: Option<String>,
+    season_number: u16,
+    episodes: Vec<TmdbEpisodeDetails>,
+}
+
+#[derive(Deserialize)]
+struct TmdbEpisodeDetails {
+    id: u64,
+    name: String,
+    overview: String,
+    still_path: Option<String>,
+    air_date: Option<String>,
+    runtime: Option<u16>,
+    vote_average: f64,
+    season_number: u16,
+    episode_number: u16,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SeasonMetadata {
+    tmdb_id: u64,
+    name: String,
+    overview: String,
+    poster_path: Option<String>,
+    air_date: Option<String>,
+    season_number: u16,
+    episodes: Vec<EpisodeMetadata>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EpisodeMetadata {
+    tmdb_id: u64,
+    name: String,
+    overview: String,
+    still_path: Option<String>,
+    air_date: Option<String>,
+    episode_number: u16,
+    season_number: u16,
+    runtime: Option<u16>,
+    vote_average: f64,
+}
+
+#[tauri::command]
+async fn get_season_metadata(
+    series_id: u64,
+    season_number: u16,
+) -> Result<SeasonMetadata, String> {
+    dotenvy::dotenv().ok();
+
+    let token = std::env::var("TMDB_TOKEN")
+        .map_err(|_| "Переменная TMDB_TOKEN не задана".to_string())?;
+
+    let url = format!(
+        "https://api.themoviedb.org/3/tv/{series_id}/season/{season_number}"
+    );
+
+    let response = reqwest::Client::new()
+        .get(url)
+        .bearer_auth(token)
+        .query(&[("language", "ru-RU")])
+        .send()
+        .await
+        .map_err(|error| format!("Ошибка запроса TMDB: {error}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!("TMDB вернул статус {}", response.status()));
+    }
+
+    let season = response
+        .json::<TmdbSeasonDetails>()
+        .await
+        .map_err(|error| format!("Ошибка ответа TMDB: {error}"))?;
+
+    Ok(SeasonMetadata {
+        tmdb_id: season.id,
+        name: season.name,
+        overview: season.overview,
+        poster_path: season.poster_path,
+        air_date: season.air_date,
+        season_number: season.season_number,
+        episodes: season
+            .episodes
+            .into_iter()
+            .map(|episode| EpisodeMetadata {
+                tmdb_id: episode.id,
+                name: episode.name,
+                overview: episode.overview,
+                still_path: episode.still_path,
+                air_date: episode.air_date,
+                episode_number: episode.episode_number,
+                season_number: episode.season_number,
+                runtime: episode.runtime,
+                vote_average: episode.vote_average,
+            })
+            .collect(),
+    })
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EpisodeDetails {
+    tmdb_id: u64,
+    name: String,
+    overview: String,
+    still_path: Option<String>,
+    air_date: Option<String>,
+    runtime: Option<u16>,
+    vote_average: f64,
+    season_number: u16,
+    episode_number: u16,
+}
+
+#[tauri::command]
+async fn get_episode_details(
+    series_id: u64,
+    season_number: u16,
+    episode_number: u16,
+) -> Result<EpisodeDetails, String> {
+    dotenvy::dotenv().ok();
+
+    let token = std::env::var("TMDB_TOKEN")
+        .map_err(|_| "Переменная TMDB_TOKEN не задана".to_string())?;
+
+    let url = format!(
+        "https://api.themoviedb.org/3/tv/{series_id}/season/{season_number}/episode/{episode_number}"
+    );
+
+    let response = reqwest::Client::new()
+        .get(url)
+        .bearer_auth(token)
+        .query(&[("language", "ru-RU")])
+        .send()
+        .await
+        .map_err(|error| format!("Ошибка запроса TMDB: {error}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!("TMDB вернул статус {}", response.status()));
+    }
+
+    let episode = response
+        .json::<TmdbEpisodeDetails>()
+        .await
+        .map_err(|error| format!("Ошибка ответа TMDB: {error}"))?;
+
+    Ok(EpisodeDetails {
+        tmdb_id: episode.id,
+        name: episode.name,
+        overview: episode.overview,
+        still_path: episode.still_path,
+        air_date: episode.air_date,
+        runtime: episode.runtime,
+        vote_average: episode.vote_average,
+        season_number: episode.season_number,
+        episode_number: episode.episode_number,
+    })
 }
