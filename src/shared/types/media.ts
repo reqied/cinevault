@@ -89,3 +89,42 @@ export type MediaRow = {
   metadata_attempts: number;
   metadata_error: string | null;
 };
+
+export type SeriesMetadata = {
+  tmdbId: number;
+  title: string;
+  originalTitle: string;
+  overview: string;
+  posterPath: string | null;
+  backdropPath: string | null;
+  firstAirDate: string | null;
+  voteAverage: number;
+};
+
+export type SeriesGroup = {
+  id?: number;
+  key: string;
+  title: string;
+  originalTitle?: string | null;
+  year: number | null;
+  tmdbId?: number | null;
+  posterPath: string | null;
+  backdropPath: string | null;
+  overview: string | null;
+  firstAirDate?: string | null;
+  voteAverage?: number | null;
+  userRating?: number | null;
+  review?: string | null;
+  episodes: MediaFile[];
+};
+
+export type LibraryItem =
+  | {
+      type: "movie";
+      file: MediaFile;
+    }
+  | {
+      type: "series";
+      series: SeriesGroup;
+    };
+

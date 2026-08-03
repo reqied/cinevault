@@ -23,6 +23,7 @@ import { selectAndScanFolder } from "../services/library";
 import {
   getMediaFiles,
   getMetadataProgress,
+  getSeriesGroups,
   retryFailedMetadata,
   saveLibraryFolder,
   saveMediaFiles,
@@ -31,9 +32,11 @@ import {
 import { runMetadataQueue } from "../services/metadataQueue";
 import type {
   LibraryFolderType,
+  LibraryItem,
   MediaFile,
+  SeriesGroup,
 } from "../shared/types/media";
-
+import { SeriesCard } from "../components/SeriesCard";
 const emptyProgress: MetadataProgress = {
   total: 0,
   pending: 0,
@@ -41,8 +44,10 @@ const emptyProgress: MetadataProgress = {
   completed: 0,
   failed: 0,
 };
+import { updateSeriesMetadata } from "../services/seriesMetadata";
 
 export function LibraryPage() {
+  const [seriesGroups, setSeriesGroups] = useState<SeriesGroup[]>([]);
   const [files, setFiles] = useState<MediaFile[]>([]);
   const [progress, setProgress] =
     useState<MetadataProgress>(emptyProgress);
@@ -61,12 +66,14 @@ export function LibraryPage() {
       }
 
       try {
-        const [storedFiles, metadataProgress] = await Promise.all([
+        const [storedFiles, storedSeries, metadataProgress] = await Promise.all([
           getMediaFiles(),
+          getSeriesGroups(),
           getMetadataProgress(),
         ]);
 
         setFiles(storedFiles);
+        setSeriesGroups(storedSeries);
         setProgress(metadataProgress);
       } catch (value) {
         setError(String(value));
@@ -122,6 +129,7 @@ export function LibraryPage() {
       await loadLibrary();
 
       void runMetadataQueue();
+      void updateSeriesMetadata();
     } catch (value) {
       setError(String(value));
     } finally {
@@ -136,6 +144,7 @@ export function LibraryPage() {
       await retryFailedMetadata();
       await loadLibrary();
       void runMetadataQueue();
+      void updateSeriesMetadata();
     } catch (value) {
       setError(String(value));
     }
@@ -151,6 +160,23 @@ export function LibraryPage() {
   const queueActive =
     progress.pending > 0 || progress.processing > 0;
 
+  const libraryItems: LibraryItem[] = (() => {
+    const movies: LibraryItem[] = files
+      .filter((file) => file.mediaType === "movie")
+      .map((file) => ({
+        type: "movie",
+        file,
+      }));
+
+    const seriesItems: LibraryItem[] = seriesGroups
+      .filter((series) => series.episodes.length > 0)
+      .map((series) => ({
+        type: "series",
+        series,
+      }));
+
+    return [...movies, ...seriesItems];
+  })();
   return (
     <Box>
       <Box
@@ -200,9 +226,11 @@ export function LibraryPage() {
         <Box sx={{ mb: 4 }}>
           <Stack
             direction="row"
-            justifyContent="space-between"
-            alignItems="center"
-            sx={{ mb: 1 }}
+            sx={{
+              mb: 1,
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
           >
             <Typography variant="body2">
               {queueActive
@@ -223,8 +251,10 @@ export function LibraryPage() {
           <Stack
             direction="row"
             spacing={2}
-            alignItems="center"
-            sx={{ mt: 1 }}
+            sx={{
+              mt: 1,
+              alignItems: "center",
+            }}
           >
             <Typography variant="caption" color="text.secondary">
               В очереди: {progress.pending}
@@ -275,12 +305,19 @@ export function LibraryPage() {
             gap: 3,
           }}
         >
-          {files.map((file) => (
+          {libraryItems.map((item) =>
+          item.type === "movie" ? (
             <MovieCard
-              key={file.id ?? file.path}
-              file={file}
+              key={`movie-${item.file.id ?? item.file.path}`}
+              file={item.file}
             />
-          ))}
+          ) : (
+            <SeriesCard
+            key={`series-${item.series.id ?? item.series.key}`}
+            series={item.series}
+            />
+          ),
+        )}
         </Box>
       )}
 

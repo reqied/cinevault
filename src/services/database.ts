@@ -5,6 +5,8 @@ import type {
   MediaFile,
   MediaRow,
   MovieMetadata,
+  SeriesGroup,
+  SeriesMetadata,
 } from "../shared/types/media";
 
 let database: Database | null = null;
@@ -468,4 +470,235 @@ export async function retryFailedMetadata(): Promise<void> {
       metadata_updated_at = CURRENT_TIMESTAMP
     WHERE metadata_status = 'failed'
   `);
+}
+
+
+export async function syncSeriesFromEpisodes(): Promise<void> {
+  const db = await getDatabase();
+  const episodes = await getMediaFiles();
+  const groups = new Map<string, MediaFile[]>();
+
+  for (const episode of episodes) {
+    if (episode.mediaType !== "episode" || !episode.id) {
+      continue;
+    }
+
+    const key = episode.title.trim().toLowerCase();
+    const group = groups.get(key) ?? [];
+
+    group.push(episode);
+    groups.set(key, group);
+  }
+
+  for (const group of groups.values()) {
+    const firstEpisode = group[0];
+
+    let rows = await db.select<{ id: number }[]>(
+      `
+        SELECT id
+        FROM series
+        WHERE LOWER(title) = LOWER(?)
+        LIMIT 1
+      `,
+      [firstEpisode.title],
+    );
+
+    if (!rows[0]) {
+      await db.execute(
+        `
+          INSERT INTO series (title, year)
+          VALUES (?, ?)
+        `,
+        [firstEpisode.title, firstEpisode.year],
+      );
+
+      rows = await db.select<{ id: number }[]>(
+        `
+          SELECT id
+          FROM series
+          WHERE LOWER(title) = LOWER(?)
+          ORDER BY id DESC
+          LIMIT 1
+        `,
+        [firstEpisode.title],
+      );
+    }
+
+    const seriesId = rows[0]?.id;
+
+    if (!seriesId) {
+      continue;
+    }
+
+    for (const episode of group) {
+      await db.execute(
+        `
+          UPDATE media
+          SET series_id = ?
+          WHERE id = ?
+        `,
+        [seriesId, episode.id],
+      );
+    }
+  }
+}
+type SeriesRow = {
+  id: number;
+  title: string;
+  original_title: string | null;
+  year: number | null;
+  tmdb_id: number | null;
+  poster_path: string | null;
+  backdrop_path: string | null;
+  overview: string | null;
+  first_air_date: string | null;
+  vote_average: number | null;
+  user_rating: number | null;
+  review: string | null;
+};
+
+export async function getSeriesGroups(): Promise<SeriesGroup[]> {
+  const db = await getDatabase();
+
+  const seriesRows = await db.select<SeriesRow[]>(`
+    SELECT
+      id,
+      title,
+      original_title,
+      year,
+      tmdb_id,
+      poster_path,
+      backdrop_path,
+      overview,
+      first_air_date,
+      vote_average,
+      user_rating,
+      review
+    FROM series
+    ORDER BY title
+  `);
+
+  const files = await getMediaFiles();
+
+  return seriesRows.map((series) => ({
+    id: series.id,
+    key: String(series.id),
+    title: series.title,
+    originalTitle: series.original_title,
+    year: series.year,
+    tmdbId: series.tmdb_id,
+    posterPath: series.poster_path,
+    backdropPath: series.backdrop_path,
+    overview: series.overview,
+    firstAirDate: series.first_air_date,
+    voteAverage: series.vote_average,
+    userRating: series.user_rating,
+    review: series.review,
+    episodes: files.filter(
+      (file) => file.seriesId === series.id,
+    ),
+  }));
+}
+
+export async function saveSeriesMetadata(
+  seriesId: number,
+  metadata: SeriesMetadata,
+): Promise<void> {
+  const db = await getDatabase();
+
+  const existing = await db.select<{ id: number }[]>(
+    `
+      SELECT id
+      FROM series
+      WHERE tmdb_id = ?
+        AND id != ?
+      LIMIT 1
+    `,
+    [metadata.tmdbId, seriesId],
+  );
+
+  const existingSeriesId = existing[0]?.id;
+
+  if (existingSeriesId) {
+    await db.execute(
+      `
+        UPDATE media
+        SET series_id = ?
+        WHERE series_id = ?
+      `,
+      [existingSeriesId, seriesId],
+    );
+
+    await db.execute(
+      `
+        DELETE FROM seasons
+        WHERE series_id = ?
+      `,
+      [seriesId],
+    );
+
+    await db.execute(
+      `
+        DELETE FROM series
+        WHERE id = ?
+      `,
+      [seriesId],
+    );
+
+    return;
+  }
+
+  await db.execute(
+    `
+      UPDATE series
+      SET
+        tmdb_id = ?,
+        title = ?,
+        original_title = ?,
+        overview = ?,
+        poster_path = ?,
+        backdrop_path = ?,
+        first_air_date = ?,
+        year = ?,
+        vote_average = ?,
+        metadata_status = 'completed',
+        metadata_error = NULL,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `,
+    [
+      metadata.tmdbId,
+      metadata.title,
+      metadata.originalTitle,
+      metadata.overview,
+      metadata.posterPath,
+      metadata.backdropPath,
+      metadata.firstAirDate,
+      metadata.firstAirDate
+        ? Number(metadata.firstAirDate.slice(0, 4))
+        : null,
+      metadata.voteAverage,
+      seriesId,
+    ],
+  );
+}
+
+export async function saveSeriesUserData(
+  seriesId: number,
+  userRating: number | null,
+  review: string,
+): Promise<void> {
+  const db = await getDatabase();
+
+  await db.execute(
+    `
+      UPDATE series
+      SET
+        user_rating = ?,
+        review = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `,
+    [userRating, review, seriesId],
+  );
 }

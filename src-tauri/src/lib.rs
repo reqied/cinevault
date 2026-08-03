@@ -60,7 +60,13 @@ fn parse_media_name(
 
     let alternative_episode_pattern =
         Regex::new(r"(?i)\b(\d{1,2})x(\d{1,3})\b").unwrap();
-
+    let title_source = if let Some(found) = episode_pattern.find(stem) {
+        &stem[..found.start()]
+    } else if let Some(found) = alternative_episode_pattern.find(stem) {
+        &stem[..found.start()]
+    } else {
+        stem
+    };
     let year_pattern =
         Regex::new(r"\b(19\d{2}|20\d{2}|2100)\b").unwrap();
 
@@ -112,7 +118,8 @@ fn parse_media_name(
             unrated|
             dubbed|
             subbed|
-            multi
+            multi |
+            lostfilm
         )\b
         ",
     )
@@ -146,8 +153,7 @@ fn parse_media_name(
         .and_then(|captures| captures.get(1))
         .and_then(|value| value.as_str().parse::<u16>().ok());
 
-    let mut cleaned = stem.replace(['.', '_'], " ");
-
+    let mut cleaned = title_source.replace(['.', '_'], " ");
     cleaned = episode_pattern.replace_all(&cleaned, " ").to_string();
 
     cleaned = alternative_episode_pattern
@@ -433,6 +439,39 @@ pub fn run() {
         "#,
         kind: MigrationKind::Up,
     },
+    Migration {
+        version: 5,
+        description: "add_series_metadata_and_user_data",
+        sql: r#"
+            ALTER TABLE series ADD COLUMN first_air_date TEXT;
+            ALTER TABLE series ADD COLUMN vote_average REAL;
+            ALTER TABLE series ADD COLUMN user_rating INTEGER;
+            ALTER TABLE series ADD COLUMN review TEXT;
+            ALTER TABLE series ADD COLUMN metadata_status TEXT NOT NULL DEFAULT 'pending';
+            ALTER TABLE series ADD COLUMN metadata_error TEXT;
+        "#,
+        kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 6,
+        description: "add_unique_series_title",
+        sql: r#"
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_series_unique_title
+                ON series(title COLLATE NOCASE);
+        "#,
+        kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 7,
+        description: "remove_unique_series_title",
+        sql: r#"
+            DROP INDEX IF EXISTS idx_series_unique_title;
+    
+            CREATE INDEX IF NOT EXISTS idx_series_title
+                ON series(title COLLATE NOCASE);
+        "#,
+        kind: MigrationKind::Up,
+    },
     ];
 
     tauri::Builder::default()
@@ -443,7 +482,98 @@ pub fn run() {
                 .add_migrations("sqlite:cinevault.db", migrations)
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![scan_media_folder, search_movie_metadata])
+        .invoke_handler(tauri::generate_handler![scan_media_folder, search_movie_metadata, search_series_metadata])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[derive(Deserialize)]
+struct TmdbTvSearchResponse {
+    results: Vec<TmdbTvSeries>,
+}
+
+#[derive(Deserialize)]
+struct TmdbTvSeries {
+    id: u64,
+    name: String,
+    original_name: String,
+    overview: String,
+    poster_path: Option<String>,
+    backdrop_path: Option<String>,
+    first_air_date: Option<String>,
+    vote_average: f64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SeriesMetadata {
+    tmdb_id: u64,
+    title: String,
+    original_title: String,
+    overview: String,
+    poster_path: Option<String>,
+    backdrop_path: Option<String>,
+    first_air_date: Option<String>,
+    vote_average: f64,
+}
+
+#[tauri::command]
+async fn search_series_metadata(
+    title: String,
+    year: Option<u16>,
+) -> Result<Option<SeriesMetadata>, String> {
+    dotenvy::dotenv().ok();
+
+    let token = std::env::var("TMDB_TOKEN")
+        .map_err(|_| "Переменная TMDB_TOKEN не задана".to_string())?;
+
+    let client = reqwest::Client::new();
+
+    let mut request = client
+        .get("https://api.themoviedb.org/3/search/tv")
+        .bearer_auth(token)
+        .query(&[
+            ("query", title.as_str()),
+            ("language", "ru-RU"),
+            ("include_adult", "false"),
+        ]);
+
+    let year_string;
+
+    if let Some(year) = year {
+        year_string = year.to_string();
+
+        request = request.query(&[
+            ("first_air_date_year", year_string.as_str()),
+        ]);
+    }
+
+    let response = request
+        .send()
+        .await
+        .map_err(|error| format!("Ошибка запроса TMDB: {error}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!("TMDB вернул статус {}", response.status()));
+    }
+
+    let result = response
+        .json::<TmdbTvSearchResponse>()
+        .await
+        .map_err(|error| format!("Ошибка ответа TMDB: {error}"))?;
+
+    let Some(series) = result.results.into_iter().next() else {
+        return Ok(None);
+    };
+
+    Ok(Some(SeriesMetadata {
+        tmdb_id: series.id,
+        title: series.name,
+        original_title: series.original_name,
+        overview: series.overview,
+        poster_path: series.poster_path,
+        backdrop_path: series.backdrop_path,
+        first_air_date: series.first_air_date,
+        vote_average: series.vote_average,
+    }))
 }

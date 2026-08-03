@@ -4,6 +4,7 @@ import { HomePage } from "../pages/HomePage";
 import { LibraryPage } from "../pages/LibraryPage";
 import { MediaDetailsPage } from "../pages/MediaDetailsPage";
 import { SettingsPage } from "../pages/SettingsPage";
+import { SeriesDetailsPage } from "../pages/SeriesDetailsPage";
 
 export const router = createBrowserRouter([
   {
@@ -24,6 +25,10 @@ export const router = createBrowserRouter([
       {
         path: "/settings",
         element: <SettingsPage />,
+      },
+      {
+        path: "/series/details",
+        element: <SeriesDetailsPage />,
       },
     ],
   },
