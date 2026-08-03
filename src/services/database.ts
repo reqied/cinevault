@@ -1,5 +1,9 @@
 import Database from "@tauri-apps/plugin-sql";
-import type { MediaFile, MediaRow } from "../shared/types/media";
+import type {
+  MediaFile,
+  MediaRow,
+  MovieMetadata,
+} from "../shared/types/media";
 
 let database: Database | null = null;
 
@@ -9,6 +13,40 @@ async function getDatabase(): Promise<Database> {
   }
 
   return database;
+}
+
+export async function saveMovieMetadata(
+  mediaId: number,
+  metadata: MovieMetadata,
+): Promise<void> {
+  const db = await getDatabase();
+
+  await db.execute(
+    `
+      UPDATE media
+      SET
+        tmdb_id = ?,
+        title = ?,
+        original_title = ?,
+        overview = ?,
+        poster_path = ?,
+        backdrop_path = ?,
+        release_date = ?,
+        metadata_status = 'loaded',
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `,
+    [
+      metadata.tmdbId,
+      metadata.title,
+      metadata.originalTitle,
+      metadata.overview,
+      metadata.posterPath,
+      metadata.backdropPath,
+      metadata.releaseDate,
+      mediaId,
+    ],
+  );
 }
 
 export async function saveMediaFiles(files: MediaFile[]): Promise<void> {
@@ -70,12 +108,17 @@ export async function getMediaFiles(): Promise<MediaFile[]> {
         extension,
         size,
         season,
-        episode
+        episode,
+        tmdb_id,
+        poster_path,
+        backdrop_path,
+        overview,
+        original_title,
+        release_date
       FROM media
       ORDER BY created_at DESC
     `,
   );
-
   return rows.map((row) => ({
     id: row.id,
     name: row.file_name,
@@ -87,5 +130,11 @@ export async function getMediaFiles(): Promise<MediaFile[]> {
     mediaType: row.media_type,
     season: row.season,
     episode: row.episode,
+    tmdbId: row.tmdb_id,
+    posterPath: row.poster_path,
+    backdropPath: row.backdrop_path,
+    overview: row.overview,
+    originalTitle: row.original_title,
+    releaseDate: row.release_date,
   }));
 }

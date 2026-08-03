@@ -36,21 +36,35 @@ import {
         }}
       >
         <CardActionArea onClick={openDetails}>
-          <Box
-            sx={{
-              height: 270,
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              bgcolor: "#202028",
-            }}
-          >
-            {file.mediaType === "episode" ? (
-              <Tv sx={{ fontSize: 72, color: "text.secondary" }} />
-            ) : (
-              <LocalMovies sx={{ fontSize: 72, color: "text.secondary" }} />
-            )}
-          </Box>
+        {file.posterPath ? (
+  <Box
+    component="img"
+    src={`https://image.tmdb.org/t/p/w500${file.posterPath}`}
+    alt={file.title}
+    sx={{
+      width: "100%",
+      height: 270,
+      objectFit: "cover",
+      display: "block",
+    }}
+  />
+) : (
+  <Box
+    sx={{
+      height: 270,
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      bgcolor: "#202028",
+    }}
+  >
+    {file.mediaType === "episode" ? (
+      <Tv sx={{ fontSize: 72, color: "text.secondary" }} />
+    ) : (
+      <LocalMovies sx={{ fontSize: 72, color: "text.secondary" }} />
+    )}
+  </Box>
+)}
   
           <CardContent>
             <Typography fontWeight={600} noWrap>

@@ -1,7 +1,35 @@
-use serde::Serialize;
 use std::path::Path;
 use walkdir::WalkDir;
 use tauri_plugin_sql::{Migration, MigrationKind};
+use serde::{Deserialize, Serialize};
+
+#[derive(Deserialize)]
+struct TmdbSearchResponse {
+    results: Vec<TmdbMovie>,
+}
+
+#[derive(Deserialize)]
+struct TmdbMovie {
+    id: u64,
+    title: String,
+    original_title: String,
+    overview: String,
+    poster_path: Option<String>,
+    backdrop_path: Option<String>,
+    release_date: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MovieMetadata {
+    tmdb_id: u64,
+    title: String,
+    original_title: String,
+    overview: String,
+    poster_path: Option<String>,
+    backdrop_path: Option<String>,
+    release_date: Option<String>,
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -73,6 +101,62 @@ fn parse_media_name(file_name: &str) -> (String, Option<u16>, String, Option<u16
     };
 
     (title, year, media_type.to_string(), season, episode)
+}
+#[tauri::command]
+async fn search_movie_metadata(
+    title: String,
+    year: Option<u16>,
+) -> Result<Option<MovieMetadata>, String> {
+    dotenvy::dotenv().ok();
+
+    let token = std::env::var("TMDB_TOKEN")
+        .map_err(|_| "Переменная TMDB_TOKEN не задана".to_string())?;
+
+    let client = reqwest::Client::new();
+
+    let mut request = client
+        .get("https://api.themoviedb.org/3/search/movie")
+        .bearer_auth(token)
+        .query(&[
+            ("query", title.as_str()),
+            ("language", "ru-RU"),
+            ("include_adult", "false"),
+        ]);
+
+    let year_string;
+
+    if let Some(year) = year {
+        year_string = year.to_string();
+        request = request.query(&[("primary_release_year", year_string.as_str())]);
+    }
+
+    let response = request
+        .send()
+        .await
+        .map_err(|error| format!("Ошибка запроса TMDB: {error}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!("TMDB вернул статус {}", response.status()));
+    }
+
+    let search_result = response
+        .json::<TmdbSearchResponse>()
+        .await
+        .map_err(|error| format!("Ошибка обработки ответа TMDB: {error}"))?;
+
+    let Some(movie) = search_result.results.into_iter().next() else {
+        return Ok(None);
+    };
+
+    Ok(Some(MovieMetadata {
+        tmdb_id: movie.id,
+        title: movie.title,
+        original_title: movie.original_title,
+        overview: movie.overview,
+        poster_path: movie.poster_path,
+        backdrop_path: movie.backdrop_path,
+        release_date: movie.release_date,
+    }))
 }
 
 #[tauri::command]
@@ -152,7 +236,22 @@ pub fn run() {
             );
         "#,
         kind: MigrationKind::Up,
-    }];
+    },
+    Migration {
+        version: 2,
+        description: "add_tmdb_metadata",
+        sql: r#"
+            ALTER TABLE media ADD COLUMN tmdb_id INTEGER;
+            ALTER TABLE media ADD COLUMN poster_path TEXT;
+            ALTER TABLE media ADD COLUMN backdrop_path TEXT;
+            ALTER TABLE media ADD COLUMN overview TEXT;
+            ALTER TABLE media ADD COLUMN original_title TEXT;
+            ALTER TABLE media ADD COLUMN release_date TEXT;
+            ALTER TABLE media ADD COLUMN metadata_status TEXT NOT NULL DEFAULT 'pending';
+        "#,
+        kind: MigrationKind::Up,
+    },
+    ];
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -162,7 +261,7 @@ pub fn run() {
                 .add_migrations("sqlite:cinevault.db", migrations)
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![scan_media_folder])
+        .invoke_handler(tauri::generate_handler![scan_media_folder, search_movie_metadata])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

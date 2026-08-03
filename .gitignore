@@ -82,3 +82,6 @@ videos/
 *.mov
 *.webm
 *.m4v
+
+
+src-tauri/.env

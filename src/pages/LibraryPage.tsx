@@ -9,7 +9,12 @@ import {
 import { Add } from "@mui/icons-material";
 import { MovieCard } from "../components/MovieCard";
 import { selectAndScanFolder } from "../services/library";
-import { getMediaFiles, saveMediaFiles } from "../services/database";
+import {
+  getMediaFiles,
+  saveMediaFiles,
+  saveMovieMetadata,
+} from "../services/database";
+import { searchMovieMetadata } from "../services/tmdb";
 import type { MediaFile } from "../shared/types/media";
 
 export function LibraryPage() {
@@ -47,6 +52,21 @@ export function LibraryPage() {
       }
 
       await saveMediaFiles(result.files);
+
+      const importedFiles = await getMediaFiles();
+
+      for (const file of importedFiles) {
+        if (file.mediaType !== "movie" || file.tmdbId || !file.id) {
+          continue;
+        }
+
+        const metadata = await searchMovieMetadata(file.title, file.year);
+
+        if (metadata) {
+          await saveMovieMetadata(file.id, metadata);
+        }
+      }
+
       await loadLibrary();
     } catch (value) {
       setError(String(value));

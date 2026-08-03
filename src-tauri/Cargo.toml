@@ -25,4 +25,7 @@ serde_json = "1"
 tauri-plugin-dialog = "2"
 walkdir = "2.5.0"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
+reqwest = { version = "0.13.4", features = ["json", "query"] }
+dotenvy = "0.15.7"
+urlencoding = "2.1.3"
 
