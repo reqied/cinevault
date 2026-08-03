@@ -1,4 +1,33 @@
 export type MediaType = "movie" | "episode";
+export type LibraryFolderType = "movies" | "series" | "mixed";
+
+export type LibraryFolder = {
+  id: number;
+  path: string;
+  folderType: LibraryFolderType;
+  createdAt: string;
+};
+
+export type Series = {
+  id: number;
+  title: string;
+  originalTitle: string | null;
+  year: number | null;
+  tmdbId: number | null;
+  posterPath: string | null;
+  backdropPath: string | null;
+  overview: string | null;
+};
+
+export type Season = {
+  id: number;
+  seriesId: number;
+  seasonNumber: number;
+  title: string | null;
+  posterPath: string | null;
+  overview: string | null;
+};
+
 
 export type MediaFile = {
   id?: number;

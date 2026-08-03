@@ -11,6 +11,7 @@ import { MovieCard } from "../components/MovieCard";
 import { selectAndScanFolder } from "../services/library";
 import {
   getMediaFiles,
+  saveLibraryFolder,
   saveMediaFiles,
   saveMovieMetadata,
 } from "../services/database";
@@ -51,8 +52,12 @@ export function LibraryPage() {
         return;
       }
 
-      await saveMediaFiles(result.files);
-
+      const libraryFolderId = await saveLibraryFolder(
+        result.folderPath,
+        "mixed",
+      );
+      
+      await saveMediaFiles(result.files, libraryFolderId);
       const importedFiles = await getMediaFiles();
 
       for (const file of importedFiles) {

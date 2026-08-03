@@ -1,5 +1,7 @@
 import Database from "@tauri-apps/plugin-sql";
 import type {
+  LibraryFolder,
+  LibraryFolderType,
   MediaFile,
   MediaRow,
   MovieMetadata,
@@ -49,13 +51,16 @@ export async function saveMovieMetadata(
   );
 }
 
-export async function saveMediaFiles(files: MediaFile[]): Promise<void> {
+export async function saveMediaFiles(files: MediaFile[],
+  libraryFolderId: number,
+): Promise<void> {
   const db = await getDatabase();
 
   for (const file of files) {
     await db.execute(
       `
         INSERT INTO media (
+          library_folder_id,
           path,
           file_name,
           title,
@@ -66,8 +71,9 @@ export async function saveMediaFiles(files: MediaFile[]): Promise<void> {
           season,
           episode
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(path) DO UPDATE SET
+          library_folder_id = excluded.library_folder_id,
           file_name = excluded.file_name,
           title = excluded.title,
           year = excluded.year,
@@ -79,6 +85,7 @@ export async function saveMediaFiles(files: MediaFile[]): Promise<void> {
           updated_at = CURRENT_TIMESTAMP
       `,
       [
+        libraryFolderId,
         file.path,
         file.name,
         file.title,
@@ -100,6 +107,9 @@ export async function getMediaFiles(): Promise<MediaFile[]> {
     `
       SELECT
         id,
+        library_folder_id,
+        series_id,
+        season_id,
         path,
         file_name,
         title,
@@ -121,6 +131,9 @@ export async function getMediaFiles(): Promise<MediaFile[]> {
   );
   return rows.map((row) => ({
     id: row.id,
+    libraryFolderId: row.library_folder_id,
+    seriesId: row.series_id,
+    seasonId: row.season_id,
     name: row.file_name,
     path: row.path,
     extension: row.extension,
@@ -137,4 +150,93 @@ export async function getMediaFiles(): Promise<MediaFile[]> {
     originalTitle: row.original_title,
     releaseDate: row.release_date,
   }));
+}
+
+export async function saveLibraryFolder(
+  path: string,
+  folderType: LibraryFolderType = "mixed",
+): Promise<number> {
+  const db = await getDatabase();
+
+  await db.execute(
+    `
+      INSERT INTO library_folders (
+        path,
+        folder_type
+      )
+      VALUES (?, ?)
+      ON CONFLICT(path) DO UPDATE SET
+        folder_type = excluded.folder_type,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+    [path, folderType],
+  );
+
+  const rows = await db.select<{ id: number }[]>(
+    `
+      SELECT id
+      FROM library_folders
+      WHERE path = ?
+      LIMIT 1
+    `,
+    [path],
+  );
+
+  if (!rows[0]) {
+    throw new Error("Не удалось сохранить папку библиотеки");
+  }
+
+  return rows[0].id;
+}
+
+export async function getLibraryFolders(): Promise<LibraryFolder[]> {
+  const db = await getDatabase();
+
+  const rows = await db.select<
+    {
+      id: number;
+      path: string;
+      folder_type: LibraryFolderType;
+      created_at: string;
+    }[]
+  >(
+    `
+      SELECT
+        id,
+        path,
+        folder_type,
+        created_at
+      FROM library_folders
+      ORDER BY created_at DESC
+    `,
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    path: row.path,
+    folderType: row.folder_type,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function deleteLibraryFolder(
+  libraryFolderId: number,
+): Promise<void> {
+  const db = await getDatabase();
+
+  await db.execute(
+    `
+      DELETE FROM media
+      WHERE library_folder_id = ?
+    `,
+    [libraryFolderId],
+  );
+
+  await db.execute(
+    `
+      DELETE FROM library_folders
+      WHERE id = ?
+    `,
+    [libraryFolderId],
+  );
 }

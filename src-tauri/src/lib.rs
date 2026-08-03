@@ -251,6 +251,61 @@ pub fn run() {
         "#,
         kind: MigrationKind::Up,
     },
+    Migration {
+        version: 3,
+        description: "add_library_folders_and_series",
+        sql: r#"
+            CREATE TABLE IF NOT EXISTS library_folders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                path TEXT NOT NULL UNIQUE,
+                folder_type TEXT NOT NULL DEFAULT 'mixed',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+    
+            CREATE TABLE IF NOT EXISTS series (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                original_title TEXT,
+                year INTEGER,
+                tmdb_id INTEGER UNIQUE,
+                poster_path TEXT,
+                backdrop_path TEXT,
+                overview TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+    
+            CREATE TABLE IF NOT EXISTS seasons (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                series_id INTEGER NOT NULL,
+                season_number INTEGER NOT NULL,
+                title TEXT,
+                poster_path TEXT,
+                overview TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(series_id, season_number),
+                FOREIGN KEY(series_id) REFERENCES series(id) ON DELETE CASCADE
+            );
+    
+            ALTER TABLE media ADD COLUMN library_folder_id INTEGER;
+            ALTER TABLE media ADD COLUMN series_id INTEGER;
+            ALTER TABLE media ADD COLUMN season_id INTEGER;
+    
+            CREATE INDEX IF NOT EXISTS idx_media_library_folder
+                ON media(library_folder_id);
+    
+            CREATE INDEX IF NOT EXISTS idx_media_series
+                ON media(series_id);
+    
+            CREATE INDEX IF NOT EXISTS idx_media_season
+                ON media(season_id);
+    
+            CREATE INDEX IF NOT EXISTS idx_series_tmdb
+                ON series(tmdb_id);
+        "#,
+        kind: MigrationKind::Up,
+    },
     ];
 
     tauri::Builder::default()
