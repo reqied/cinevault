@@ -203,7 +203,7 @@ export function SettingsPage() {
 
                   <Button
                     color="error"
-                    startIcon={<DeleteOutlinedIcon />}
+                    startIcon={<DeleteOutlineIcon />}
                     disabled={processing}
                     onClick={() => setFolderToDelete(folder)}
                   >

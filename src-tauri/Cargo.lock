@@ -608,6 +608,7 @@ name = "cinevault"
 version = "0.1.0"
 dependencies = [
  "dotenvy",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",

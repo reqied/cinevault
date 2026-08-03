@@ -2,6 +2,7 @@ use std::path::Path;
 use walkdir::WalkDir;
 use tauri_plugin_sql::{Migration, MigrationKind};
 use serde::{Deserialize, Serialize};
+use regex::Regex;
 
 #[derive(Deserialize)]
 struct TmdbSearchResponse {
@@ -45,53 +46,139 @@ struct MediaFile {
     episode: Option<u16>,
 }
 
-fn parse_media_name(file_name: &str) -> (String, Option<u16>, String, Option<u16>, Option<u16>) {
+fn parse_media_name(
+    file_name: &str,
+) -> (String, Option<u16>, String, Option<u16>, Option<u16>) {
     let stem = Path::new(file_name)
         .file_stem()
         .and_then(|value| value.to_str())
         .unwrap_or(file_name);
 
-    let normalized = stem.replace(['.', '_', '-'], " ");
-    let words: Vec<&str> = normalized.split_whitespace().collect();
+    let episode_pattern =
+        Regex::new(r"(?i)\bS(\d{1,2})E(\d{1,3})\b").unwrap();
 
-    let mut year = None;
+    let alternative_episode_pattern =
+        Regex::new(r"(?i)\b(\d{1,2})x(\d{1,3})\b").unwrap();
+
+    let year_pattern =
+        Regex::new(r"\b(19\d{2}|20\d{2}|2100)\b").unwrap();
+
+    let technical_pattern = Regex::new(
+        r"(?ix)
+        \b(
+            480p|
+            576p|
+            720p|
+            1080p|
+            1440p|
+            2160p|
+            4k|
+            8k|
+            bluray|
+            blu-ray|
+            bdrip|
+            brrip|
+            web-dl|
+            webdl|
+            webrip|
+            hdrip|
+            dvdrip|
+            remux|
+            hdtv|
+            hdr|
+            hdr10|
+            hdr10\+|
+            dolby[\s._-]*vision|
+            dv|
+            x264|
+            x265|
+            h264|
+            h265|
+            hevc|
+            av1|
+            aac|
+            ac3|
+            eac3|
+            dts|
+            dts-hd|
+            truehd|
+            atmos|
+            mp3|
+            flac|
+            proper|
+            repack|
+            extended|
+            unrated|
+            dubbed|
+            subbed|
+            multi
+        )\b
+        ",
+    )
+    .unwrap();
+
     let mut season = None;
     let mut episode = None;
-    let mut title_words = Vec::new();
 
-    for word in words {
-        let upper = word.to_uppercase();
+    if let Some(captures) = episode_pattern.captures(stem) {
+        season = captures
+            .get(1)
+            .and_then(|value| value.as_str().parse::<u16>().ok());
 
-        if word.len() == 4 {
-            if let Ok(value) = word.parse::<u16>() {
-                if (1900..=2100).contains(&value) {
-                    year = Some(value);
-                    continue;
-                }
-            }
-        }
+        episode = captures
+            .get(2)
+            .and_then(|value| value.as_str().parse::<u16>().ok());
+    } else if let Some(captures) =
+        alternative_episode_pattern.captures(stem)
+    {
+        season = captures
+            .get(1)
+            .and_then(|value| value.as_str().parse::<u16>().ok());
 
-        if upper.len() >= 6 && upper.starts_with('S') {
-            if let Some(e_position) = upper.find('E') {
-                let season_value = &upper[1..e_position];
-                let episode_value = &upper[e_position + 1..];
-
-                if let (Ok(s), Ok(e)) = (season_value.parse::<u16>(), episode_value.parse::<u16>())
-                {
-                    season = Some(s);
-                    episode = Some(e);
-                    continue;
-                }
-            }
-        }
-
-        title_words.push(word);
+        episode = captures
+            .get(2)
+            .and_then(|value| value.as_str().parse::<u16>().ok());
     }
 
-    let title = if title_words.is_empty() {
+    let year = year_pattern
+        .captures(stem)
+        .and_then(|captures| captures.get(1))
+        .and_then(|value| value.as_str().parse::<u16>().ok());
+
+    let mut cleaned = stem.replace(['.', '_'], " ");
+
+    cleaned = episode_pattern.replace_all(&cleaned, " ").to_string();
+
+    cleaned = alternative_episode_pattern
+        .replace_all(&cleaned, " ")
+        .to_string();
+
+    cleaned = year_pattern.replace_all(&cleaned, " ").to_string();
+
+    cleaned = technical_pattern
+        .replace_all(&cleaned, " ")
+        .to_string();
+
+    cleaned = Regex::new(r"[\[\](){}]")
+        .unwrap()
+        .replace_all(&cleaned, " ")
+        .to_string();
+
+    cleaned = Regex::new(r"\s+-\s+")
+        .unwrap()
+        .replace_all(&cleaned, " ")
+        .to_string();
+
+    cleaned = Regex::new(r"\s+")
+        .unwrap()
+        .replace_all(&cleaned, " ")
+        .trim()
+        .to_string();
+
+    let title = if cleaned.is_empty() {
         stem.to_string()
     } else {
-        title_words.join(" ")
+        cleaned
     };
 
     let media_type = if season.is_some() && episode.is_some() {
@@ -100,8 +187,15 @@ fn parse_media_name(file_name: &str) -> (String, Option<u16>, String, Option<u16
         "movie"
     };
 
-    (title, year, media_type.to_string(), season, episode)
+    (
+        title,
+        year,
+        media_type.to_string(),
+        season,
+        episode,
+    )
 }
+
 #[tauri::command]
 async fn search_movie_metadata(
     title: String,

@@ -4,7 +4,15 @@ import {
   Box,
   Button,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  InputLabel,
   LinearProgress,
+  MenuItem,
+  Select,
   Stack,
   Typography,
 } from "@mui/material";
@@ -21,7 +29,10 @@ import {
   type MetadataProgress,
 } from "../services/database";
 import { runMetadataQueue } from "../services/metadataQueue";
-import type { MediaFile } from "../shared/types/media";
+import type {
+  LibraryFolderType,
+  MediaFile,
+} from "../shared/types/media";
 
 const emptyProgress: MetadataProgress = {
   total: 0,
@@ -37,6 +48,10 @@ export function LibraryPage() {
     useState<MetadataProgress>(emptyProgress);
   const [initialLoading, setInitialLoading] = useState(true);
   const [importing, setImporting] = useState(false);
+  const [folderTypeDialogOpen, setFolderTypeDialogOpen] =
+    useState(false);
+  const [folderType, setFolderType] =
+    useState<LibraryFolderType>("movies");
   const [error, setError] = useState("");
 
   const loadLibrary = useCallback(
@@ -87,6 +102,7 @@ export function LibraryPage() {
   }, [loadLibrary]);
 
   async function handleSelectFolder() {
+    setFolderTypeDialogOpen(false);
     setImporting(true);
     setError("");
 
@@ -99,7 +115,7 @@ export function LibraryPage() {
 
       const libraryFolderId = await saveLibraryFolder(
         result.folderPath,
-        "mixed",
+        folderType,
       );
 
       await saveMediaFiles(result.files, libraryFolderId);
@@ -125,8 +141,7 @@ export function LibraryPage() {
     }
   }
 
-  const processedCount =
-    progress.completed + progress.failed;
+  const processedCount = progress.completed + progress.failed;
 
   const progressValue =
     progress.total > 0
@@ -168,7 +183,7 @@ export function LibraryPage() {
               <AddIcon />
             )
           }
-          onClick={handleSelectFolder}
+          onClick={() => setFolderTypeDialogOpen(true)}
           disabled={importing}
         >
           Добавить папку
@@ -195,10 +210,7 @@ export function LibraryPage() {
                 : "Обработка завершена"}
             </Typography>
 
-            <Typography
-              variant="body2"
-              color="text.secondary"
-            >
+            <Typography variant="body2" color="text.secondary">
               {processedCount} / {progress.total}
             </Typography>
           </Stack>
@@ -214,24 +226,15 @@ export function LibraryPage() {
             alignItems="center"
             sx={{ mt: 1 }}
           >
-            <Typography
-              variant="caption"
-              color="text.secondary"
-            >
+            <Typography variant="caption" color="text.secondary">
               В очереди: {progress.pending}
             </Typography>
 
-            <Typography
-              variant="caption"
-              color="text.secondary"
-            >
+            <Typography variant="caption" color="text.secondary">
               Обрабатывается: {progress.processing}
             </Typography>
 
-            <Typography
-              variant="caption"
-              color="text.secondary"
-            >
+            <Typography variant="caption" color="text.secondary">
               Готово: {progress.completed}
             </Typography>
 
@@ -280,6 +283,54 @@ export function LibraryPage() {
           ))}
         </Box>
       )}
+
+      <Dialog
+        open={folderTypeDialogOpen}
+        onClose={() => setFolderTypeDialogOpen(false)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Тип папки</DialogTitle>
+
+        <DialogContent>
+          <Typography color="text.secondary" sx={{ mb: 3 }}>
+            Выбери, какой контент хранится в папке.
+          </Typography>
+
+          <FormControl fullWidth>
+            <InputLabel>Тип контента</InputLabel>
+
+            <Select
+              value={folderType}
+              label="Тип контента"
+              onChange={(event) =>
+                setFolderType(
+                  event.target.value as LibraryFolderType,
+                )
+              }
+            >
+              <MenuItem value="movies">Фильмы</MenuItem>
+              <MenuItem value="series">Сериалы</MenuItem>
+              <MenuItem value="mixed">Смешанная папка</MenuItem>
+            </Select>
+          </FormControl>
+        </DialogContent>
+
+        <DialogActions>
+          <Button
+            onClick={() => setFolderTypeDialogOpen(false)}
+          >
+            Отмена
+          </Button>
+
+          <Button
+            variant="contained"
+            onClick={handleSelectFolder}
+          >
+            Выбрать папку
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
