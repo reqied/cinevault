@@ -103,28 +103,29 @@ export function LibraryPage() {
       "cinevault:library-changed",
       handleLibraryChanged,
     );
-    useEffect(() => {
-      function handleProgressChanged() {
-        void loadLibrary();
-      }
-    
-      window.addEventListener(
-        "cinevault:progress-changed",
-        handleProgressChanged,
-      );
-    
-      return () => {
-        window.removeEventListener(
-          "cinevault:progress-changed",
-          handleProgressChanged,
-        );
-      };
-    }, [loadLibrary]);
 
     return () => {
       window.removeEventListener(
         "cinevault:library-changed",
         handleLibraryChanged,
+      );
+    };
+  }, [loadLibrary]);
+    
+  useEffect(() => {
+    function handleProgressChanged() {
+      void loadLibrary();
+    }
+  
+    window.addEventListener(
+      "cinevault:progress-changed",
+      handleProgressChanged,
+    );
+  
+    return () => {
+      window.removeEventListener(
+        "cinevault:progress-changed",
+        handleProgressChanged,
       );
     };
   }, [loadLibrary]);

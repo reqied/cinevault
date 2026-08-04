@@ -93,14 +93,19 @@ import {
       );
   
       function openEpisode(file: MediaFile) {
+        const orderedEpisodes = sortedSeasons.flatMap(
+          ({ episodes }) => episodes,
+        );
+      
         navigate("/media/details", {
           state: {
             file,
             series,
+            episodes: orderedEpisodes,
           },
         });
       }
-        
+
     return (
       <Box>
         <Button

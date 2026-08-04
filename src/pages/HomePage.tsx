@@ -14,11 +14,14 @@ import {
 import { WatchlistCard } from "../components/WatchlistCard";
 import AddIcon from "@mui/icons-material/Add";
 import { AddWatchlistDialog } from "../components/AddWatchlistDialog";
+import { ContinueWatchingCard } from "../components/ContinueWatchingCard";
+
 const emptyHomeData: HomeData = {
   recentlyAdded: [],
   movies: [],
   series: [],
   watchlist: [],
+  continueWatching: [],
 };
 
 export function HomePage() {
@@ -58,6 +61,24 @@ export function HomePage() {
       window.removeEventListener(
         "cinevault:library-changed",
         handleLibraryChanged,
+      );
+    };
+  }, [loadHome]);
+
+  useEffect(() => {
+    function handleProgressChanged() {
+      void loadHome();
+    }
+  
+    window.addEventListener(
+      "cinevault:progress-changed",
+      handleProgressChanged,
+    );
+  
+    return () => {
+      window.removeEventListener(
+        "cinevault:progress-changed",
+        handleProgressChanged,
       );
     };
   }, [loadHome]);
@@ -107,7 +128,33 @@ export function HomePage() {
             title="Недавно добавленные"
             items={data.recentlyAdded}
           />
-  
+          {data.continueWatching.length > 0 && (
+  <Box sx={{ mb: 5 }}>
+    <Typography
+      variant="h5"
+      fontWeight={700}
+      sx={{ mb: 2 }}
+    >
+      Продолжить просмотр
+    </Typography>
+
+    <Box
+      sx={{
+        display: "flex",
+        gap: 2,
+        overflowX: "auto",
+        pb: 2,
+      }}
+    >
+      {data.continueWatching.map((file) => (
+        <ContinueWatchingCard
+          key={`continue-${file.id ?? file.path}`}
+          file={file}
+        />
+      ))}
+    </Box>
+  </Box>
+)}
           {data.watchlist.length > 0 && (
             <Box sx={{ mb: 5 }}>
               <Typography

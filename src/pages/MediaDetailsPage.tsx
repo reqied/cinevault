@@ -25,6 +25,7 @@ import type {
 type LocationState = {
   file?: MediaFile;
   series?: SeriesGroup;
+  episodes?: MediaFile[];
 };
 
 const imageBaseUrl = "https://image.tmdb.org/t/p";
@@ -32,7 +33,7 @@ const imageBaseUrl = "https://image.tmdb.org/t/p";
 export function MediaDetailsPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { file, series } = (location.state ?? {}) as LocationState;
+  const { file, series, episodes } = (location.state ?? {}) as LocationState;
 
   const [episodeDetails, setEpisodeDetails] =
     useState<EpisodeDetails | null>(null);
@@ -286,6 +287,7 @@ export function MediaDetailsPage() {
                 navigate("/player", {
                   state: {
                     file,
+                    episodes,
                   },
                 })
               }
