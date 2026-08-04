@@ -25,7 +25,9 @@ const sidebarWidth = 240;
 
 export function MainLayout() {
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh" }}>
+    <Box sx={{ display: "flex", minHeight: "100vh",
+      bgcolor: "background.default",
+   }}>
       <Box
         component="aside"
         sx={{

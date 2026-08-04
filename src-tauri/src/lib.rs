@@ -1,8 +1,8 @@
-use std::path::Path;
-use walkdir::WalkDir;
-use tauri_plugin_sql::{Migration, MigrationKind};
-use serde::{Deserialize, Serialize};
 use regex::Regex;
+use serde::{Deserialize, Serialize};
+use std::path::Path;
+use tauri_plugin_sql::{Migration, MigrationKind};
+use walkdir::WalkDir;
 
 #[derive(Deserialize)]
 struct TmdbSearchResponse {
@@ -55,11 +55,9 @@ fn parse_media_name(
         .and_then(|value| value.to_str())
         .unwrap_or(file_name);
 
-    let episode_pattern =
-        Regex::new(r"(?i)\bS(\d{1,2})E(\d{1,3})\b").unwrap();
+    let episode_pattern = Regex::new(r"(?i)\bS(\d{1,2})E(\d{1,3})\b").unwrap();
 
-    let alternative_episode_pattern =
-        Regex::new(r"(?i)\b(\d{1,2})x(\d{1,3})\b").unwrap();
+    let alternative_episode_pattern = Regex::new(r"(?i)\b(\d{1,2})x(\d{1,3})\b").unwrap();
     let title_source = if let Some(found) = episode_pattern.find(stem) {
         &stem[..found.start()]
     } else if let Some(found) = alternative_episode_pattern.find(stem) {
@@ -67,8 +65,7 @@ fn parse_media_name(
     } else {
         stem
     };
-    let year_pattern =
-        Regex::new(r"\b(19\d{2}|20\d{2}|2100)\b").unwrap();
+    let year_pattern = Regex::new(r"\b(19\d{2}|20\d{2}|2100)\b").unwrap();
 
     let technical_pattern = Regex::new(
         r"(?ix)
@@ -136,9 +133,7 @@ fn parse_media_name(
         episode = captures
             .get(2)
             .and_then(|value| value.as_str().parse::<u16>().ok());
-    } else if let Some(captures) =
-        alternative_episode_pattern.captures(stem)
-    {
+    } else if let Some(captures) = alternative_episode_pattern.captures(stem) {
         season = captures
             .get(1)
             .and_then(|value| value.as_str().parse::<u16>().ok());
@@ -162,9 +157,7 @@ fn parse_media_name(
 
     cleaned = year_pattern.replace_all(&cleaned, " ").to_string();
 
-    cleaned = technical_pattern
-        .replace_all(&cleaned, " ")
-        .to_string();
+    cleaned = technical_pattern.replace_all(&cleaned, " ").to_string();
 
     cleaned = Regex::new(r"[\[\](){}]")
         .unwrap()
@@ -204,13 +197,7 @@ fn parse_media_name(
         }
     };
 
-    (
-        title,
-        year,
-        media_type.to_string(),
-        season,
-        episode,
-    )
+    (title, year, media_type.to_string(), season, episode)
 }
 
 #[tauri::command]
@@ -220,8 +207,8 @@ async fn search_movie_metadata(
 ) -> Result<Option<MovieMetadata>, String> {
     dotenvy::dotenv().ok();
 
-    let token = std::env::var("TMDB_TOKEN")
-        .map_err(|_| "Переменная TMDB_TOKEN не задана".to_string())?;
+    let token =
+        std::env::var("TMDB_TOKEN").map_err(|_| "Переменная TMDB_TOKEN не задана".to_string())?;
 
     let client = reqwest::Client::new();
 
@@ -271,14 +258,8 @@ async fn search_movie_metadata(
 }
 
 #[tauri::command]
-fn scan_media_folder(
-    folder_path: String,
-    folder_type: String,
-) -> Result<Vec<MediaFile>, String> {
-    if !matches!(
-        folder_type.as_str(),
-        "movies" | "series" | "mixed"
-    ) {
+fn scan_media_folder(folder_path: String, folder_type: String) -> Result<Vec<MediaFile>, String> {
+    if !matches!(folder_type.as_str(), "movies" | "series" | "mixed") {
         return Err("Неизвестный тип папки".to_string());
     }
     let folder = Path::new(&folder_path);
@@ -316,8 +297,7 @@ fn scan_media_folder(
             .map_err(|error| format!("Не удалось прочитать файл: {error}"))?;
 
         let name = entry.file_name().to_string_lossy().to_string();
-        let (title, year, media_type, season, episode) =
-        parse_media_name(&name, &folder_type);
+        let (title, year, media_type, season, episode) = parse_media_name(&name, &folder_type);
         files.push(MediaFile {
             name,
             path: path.to_string_lossy().to_string(),
@@ -336,10 +316,11 @@ fn scan_media_folder(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let migrations = vec![Migration {
-        version: 1,
-        description: "create_media_table",
-        sql: r#"
+    let migrations = vec![
+        Migration {
+            version: 1,
+            description: "create_media_table",
+            sql: r#"
             CREATE TABLE IF NOT EXISTS media (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 path TEXT NOT NULL UNIQUE,
@@ -355,12 +336,12 @@ pub fn run() {
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
         "#,
-        kind: MigrationKind::Up,
-    },
-    Migration {
-        version: 2,
-        description: "add_tmdb_metadata",
-        sql: r#"
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 2,
+            description: "add_tmdb_metadata",
+            sql: r#"
             ALTER TABLE media ADD COLUMN tmdb_id INTEGER;
             ALTER TABLE media ADD COLUMN poster_path TEXT;
             ALTER TABLE media ADD COLUMN backdrop_path TEXT;
@@ -369,12 +350,12 @@ pub fn run() {
             ALTER TABLE media ADD COLUMN release_date TEXT;
             ALTER TABLE media ADD COLUMN metadata_status TEXT NOT NULL DEFAULT 'pending';
         "#,
-        kind: MigrationKind::Up,
-    },
-    Migration {
-        version: 3,
-        description: "add_library_folders_and_series",
-        sql: r#"
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 3,
+            description: "add_library_folders_and_series",
+            sql: r#"
             CREATE TABLE IF NOT EXISTS library_folders (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 path TEXT NOT NULL UNIQUE,
@@ -424,12 +405,12 @@ pub fn run() {
             CREATE INDEX IF NOT EXISTS idx_series_tmdb
                 ON series(tmdb_id);
         "#,
-        kind: MigrationKind::Up,
-    },
-    Migration {
-        version: 4,
-        description: "add_metadata_queue_fields",
-        sql: r#"
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 4,
+            description: "add_metadata_queue_fields",
+            sql: r#"
             ALTER TABLE media ADD COLUMN metadata_attempts INTEGER NOT NULL DEFAULT 0;
             ALTER TABLE media ADD COLUMN metadata_error TEXT;
             ALTER TABLE media ADD COLUMN metadata_updated_at TEXT;
@@ -437,12 +418,12 @@ pub fn run() {
             CREATE INDEX IF NOT EXISTS idx_media_metadata_status
                 ON media(metadata_status);
         "#,
-        kind: MigrationKind::Up,
-    },
-    Migration {
-        version: 5,
-        description: "add_series_metadata_and_user_data",
-        sql: r#"
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 5,
+            description: "add_series_metadata_and_user_data",
+            sql: r#"
             ALTER TABLE series ADD COLUMN first_air_date TEXT;
             ALTER TABLE series ADD COLUMN vote_average REAL;
             ALTER TABLE series ADD COLUMN user_rating INTEGER;
@@ -450,32 +431,32 @@ pub fn run() {
             ALTER TABLE series ADD COLUMN metadata_status TEXT NOT NULL DEFAULT 'pending';
             ALTER TABLE series ADD COLUMN metadata_error TEXT;
         "#,
-        kind: MigrationKind::Up,
-    },
-    Migration {
-        version: 6,
-        description: "add_unique_series_title",
-        sql: r#"
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 6,
+            description: "add_unique_series_title",
+            sql: r#"
             CREATE UNIQUE INDEX IF NOT EXISTS idx_series_unique_title
                 ON series(title COLLATE NOCASE);
         "#,
-        kind: MigrationKind::Up,
-    },
-    Migration {
-        version: 7,
-        description: "remove_unique_series_title",
-        sql: r#"
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 7,
+            description: "remove_unique_series_title",
+            sql: r#"
             DROP INDEX IF EXISTS idx_series_unique_title;
     
             CREATE INDEX IF NOT EXISTS idx_series_title
                 ON series(title COLLATE NOCASE);
         "#,
-        kind: MigrationKind::Up,
-    },
-    Migration {
-        version: 8,
-        description: "add_season_and_episode_metadata",
-        sql: r#"
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 8,
+            description: "add_season_and_episode_metadata",
+            sql: r#"
             ALTER TABLE media ADD COLUMN episode_title TEXT;
             ALTER TABLE media ADD COLUMN episode_overview TEXT;
             ALTER TABLE media ADD COLUMN still_path TEXT;
@@ -487,12 +468,12 @@ pub fn run() {
             ALTER TABLE seasons ADD COLUMN metadata_status TEXT NOT NULL DEFAULT 'pending';
             ALTER TABLE seasons ADD COLUMN metadata_error TEXT;
         "#,
-        kind: MigrationKind::Up,
-    },
-    Migration {
-        version: 9,
-        description: "create_watchlist",
-        sql: r#"
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 9,
+            description: "create_watchlist",
+            sql: r#"
             CREATE TABLE IF NOT EXISTS watchlist (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 media_type TEXT NOT NULL,
@@ -526,11 +507,40 @@ pub fn run() {
             CREATE INDEX IF NOT EXISTS idx_watchlist_is_watched
                 ON watchlist(is_watched);
         "#,
-        kind: MigrationKind::Up,
-    },
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 10,
+            description: "add_watchlist_user_data_and_path",
+            sql: r#"
+            ALTER TABLE watchlist ADD COLUMN user_rating INTEGER;
+            ALTER TABLE watchlist ADD COLUMN review TEXT;
+            ALTER TABLE watchlist ADD COLUMN linked_path TEXT;
+            ALTER TABLE watchlist ADD COLUMN linked_kind TEXT;
+        "#,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 11,
+            description: "create_watch_progress",
+            sql: r#"
+                CREATE TABLE IF NOT EXISTS watch_progress (
+                    media_id INTEGER PRIMARY KEY,
+                    position_seconds REAL NOT NULL DEFAULT 0,
+                    duration_seconds REAL NOT NULL DEFAULT 0,
+                    watched INTEGER NOT NULL DEFAULT 0,
+                    last_watched_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(media_id)
+                        REFERENCES media(id)
+                        ON DELETE CASCADE
+                );
+            "#,
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_mpv::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(
@@ -539,12 +549,13 @@ pub fn run() {
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![
-                scan_media_folder, 
-                search_movie_metadata, 
-                search_series_metadata, 
-                get_season_metadata,
-                get_episode_details
-            ])
+            scan_media_folder,
+            search_movie_metadata,
+            search_series_metadata,
+            get_season_metadata,
+            get_episode_details,
+            search_watchlist_media
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -586,8 +597,8 @@ async fn search_series_metadata(
 ) -> Result<Option<SeriesMetadata>, String> {
     dotenvy::dotenv().ok();
 
-    let token = std::env::var("TMDB_TOKEN")
-        .map_err(|_| "Переменная TMDB_TOKEN не задана".to_string())?;
+    let token =
+        std::env::var("TMDB_TOKEN").map_err(|_| "Переменная TMDB_TOKEN не задана".to_string())?;
 
     let client = reqwest::Client::new();
 
@@ -605,9 +616,7 @@ async fn search_series_metadata(
     if let Some(year) = year {
         year_string = year.to_string();
 
-        request = request.query(&[
-            ("first_air_date_year", year_string.as_str()),
-        ]);
+        request = request.query(&[("first_air_date_year", year_string.as_str())]);
     }
 
     let response = request
@@ -690,18 +699,13 @@ struct EpisodeMetadata {
 }
 
 #[tauri::command]
-async fn get_season_metadata(
-    series_id: u64,
-    season_number: u16,
-) -> Result<SeasonMetadata, String> {
+async fn get_season_metadata(series_id: u64, season_number: u16) -> Result<SeasonMetadata, String> {
     dotenvy::dotenv().ok();
 
-    let token = std::env::var("TMDB_TOKEN")
-        .map_err(|_| "Переменная TMDB_TOKEN не задана".to_string())?;
+    let token =
+        std::env::var("TMDB_TOKEN").map_err(|_| "Переменная TMDB_TOKEN не задана".to_string())?;
 
-    let url = format!(
-        "https://api.themoviedb.org/3/tv/{series_id}/season/{season_number}"
-    );
+    let url = format!("https://api.themoviedb.org/3/tv/{series_id}/season/{season_number}");
 
     let response = reqwest::Client::new()
         .get(url)
@@ -766,8 +770,8 @@ async fn get_episode_details(
 ) -> Result<EpisodeDetails, String> {
     dotenvy::dotenv().ok();
 
-    let token = std::env::var("TMDB_TOKEN")
-        .map_err(|_| "Переменная TMDB_TOKEN не задана".to_string())?;
+    let token =
+        std::env::var("TMDB_TOKEN").map_err(|_| "Переменная TMDB_TOKEN не задана".to_string())?;
 
     let url = format!(
         "https://api.themoviedb.org/3/tv/{series_id}/season/{season_number}/episode/{episode_number}"
@@ -801,4 +805,104 @@ async fn get_episode_details(
         season_number: episode.season_number,
         episode_number: episode.episode_number,
     })
+}
+
+#[derive(Deserialize)]
+struct TmdbMultiSearchResponse {
+    results: Vec<TmdbMultiSearchItem>,
+}
+
+#[derive(Deserialize)]
+struct TmdbMultiSearchItem {
+    id: u64,
+    media_type: String,
+    title: Option<String>,
+    name: Option<String>,
+    original_title: Option<String>,
+    original_name: Option<String>,
+    release_date: Option<String>,
+    first_air_date: Option<String>,
+    poster_path: Option<String>,
+    backdrop_path: Option<String>,
+    overview: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WatchlistSearchItem {
+    tmdb_id: u64,
+    media_type: String,
+    title: String,
+    original_title: String,
+    year: Option<u16>,
+    poster_path: Option<String>,
+    backdrop_path: Option<String>,
+    overview: String,
+}
+
+#[tauri::command]
+async fn search_watchlist_media(query: String) -> Result<Vec<WatchlistSearchItem>, String> {
+    dotenvy::dotenv().ok();
+
+    let token =
+        std::env::var("TMDB_TOKEN").map_err(|_| "Переменная TMDB_TOKEN не задана".to_string())?;
+
+    let response = reqwest::Client::new()
+        .get("https://api.themoviedb.org/3/search/multi")
+        .bearer_auth(token)
+        .query(&[
+            ("query", query.as_str()),
+            ("language", "ru-RU"),
+            ("include_adult", "false"),
+        ])
+        .send()
+        .await
+        .map_err(|error| format!("Ошибка запроса TMDB: {error}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!("TMDB вернул статус {}", response.status()));
+    }
+
+    let result = response
+        .json::<TmdbMultiSearchResponse>()
+        .await
+        .map_err(|error| format!("Ошибка ответа TMDB: {error}"))?;
+
+    let items = result
+        .results
+        .into_iter()
+        .filter(|item| matches!(item.media_type.as_str(), "movie" | "tv"))
+        .filter_map(|item| {
+            let title = item.title.or(item.name)?;
+            let original_title = item
+                .original_title
+                .or(item.original_name)
+                .unwrap_or_else(|| title.clone());
+
+            let date = item.release_date.or(item.first_air_date);
+
+            let year = date
+                .as_deref()
+                .and_then(|value| value.get(0..4))
+                .and_then(|value| value.parse::<u16>().ok());
+
+            Some(WatchlistSearchItem {
+                tmdb_id: item.id,
+                media_type: if item.media_type == "tv" {
+                    "series".to_string()
+                } else {
+                    "movie".to_string()
+                },
+                title,
+                original_title,
+                year,
+                poster_path: item.poster_path,
+                backdrop_path: item.backdrop_path,
+                overview: item.overview.unwrap_or_default(),
+            })
+        })
+        .take(20)
+        .collect();
+
+    Ok(items)
 }

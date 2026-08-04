@@ -17,4 +17,19 @@ export const theme = createTheme({
   shape: {
     borderRadius: 10,
   },
+  components: {
+    MuiCssBaseline: {
+      styleOverrides: {
+        html: {
+          backgroundColor: "transparent",
+        },
+        body: {
+          backgroundColor: "transparent",
+        },
+        "#root": {
+          backgroundColor: "transparent",
+        },
+      },
+    },
+  },
 });

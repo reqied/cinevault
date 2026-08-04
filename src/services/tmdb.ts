@@ -3,8 +3,17 @@ import type {
   MovieMetadata,
   SeriesMetadata,
   SeasonMetadata,
-  EpisodeDetails
+  EpisodeDetails,
+  TmdbSearchItem
 } from "../shared/types/media";
+
+export async function searchWatchlistMedia(
+  query: string,
+): Promise<TmdbSearchItem[]> {
+  return invoke<TmdbSearchItem[]>("search_watchlist_media", {
+    query,
+  });
+}
 
 export async function searchMovieMetadata(
   title: string,

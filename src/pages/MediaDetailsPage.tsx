@@ -281,12 +281,13 @@ export function MediaDetailsPage() {
             <Button
               variant="contained"
               size="large"
-              startIcon={
-                episodeLoading ? (
-                  <CircularProgress size={18} />
-                ) : (
-                  <PlayArrow />
-                )
+              startIcon={<PlayArrow />}
+              onClick={() =>
+                navigate("/player", {
+                  state: {
+                    file,
+                  },
+                })
               }
             >
               Смотреть

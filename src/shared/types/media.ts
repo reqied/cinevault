@@ -71,6 +71,10 @@ export type MediaFile = {
   airDate?: string | null;
   runtime?: number | null;
   episodeVoteAverage?: number | null;
+  watchPosition?: number;
+  watchDuration?: number;
+  isWatched?: boolean;
+  lastWatchedAt?: string | null;
 };
 
 export type MovieMetadata = {
@@ -110,7 +114,12 @@ export type MediaRow = {
   air_date: string | null;
   runtime: number | null;
   episode_vote_average: number | null;
+  watch_position: number | null;
+  watch_duration: number | null;
+  is_watched: number | null;
+  last_watched_at: string | null;
 };
+
 export type EpisodeMetadata = {
   tmdbId: number;
   name: string;
@@ -187,6 +196,10 @@ export type LibraryItem =
       linkedMediaId: number | null;
       linkedSeriesId: number | null;
       createdAt: string;
+      userRating: number | null;
+      review: string | null;
+      linkedPath: string | null;
+      linkedKind: "file" | "folder" | null;
     };
     
     export type WatchlistRow = {
@@ -203,4 +216,19 @@ export type LibraryItem =
       linked_media_id: number | null;
       linked_series_id: number | null;
       created_at: string;
+      user_rating: number | null;
+      review: string | null;
+      linked_path: string | null;
+      linked_kind: "file" | "folder" | null;
+    };
+
+    export type TmdbSearchItem = {
+      tmdbId: number;
+      mediaType: WatchlistMediaType;
+      title: string;
+      originalTitle: string;
+      year: number | null;
+      posterPath: string | null;
+      backdropPath: string | null;
+      overview: string;
     };

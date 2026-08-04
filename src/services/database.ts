@@ -10,6 +10,7 @@ import type {
   SeasonMetadata,
   WatchlistItem,
   WatchlistRow,
+  TmdbSearchItem
 } from "../shared/types/media";
 
 let database: Database | null = null;
@@ -103,45 +104,144 @@ export async function saveMediaFiles(files: MediaFile[],
     );
   }
 }
+export type WatchProgress = {
+  mediaId: number;
+  positionSeconds: number;
+  durationSeconds: number;
+  watched: boolean;
+  lastWatchedAt: string;
+};
 
+type WatchProgressRow = {
+  media_id: number;
+  position_seconds: number;
+  duration_seconds: number;
+  watched: number;
+  last_watched_at: string;
+};
+
+export async function getWatchProgress(
+  mediaId: number,
+): Promise<WatchProgress | null> {
+  const db = await getDatabase();
+
+  const rows = await db.select<WatchProgressRow[]>(
+    `
+      SELECT
+        media_id,
+        position_seconds,
+        duration_seconds,
+        watched,
+        last_watched_at
+      FROM watch_progress
+      WHERE media_id = ?
+      LIMIT 1
+    `,
+    [mediaId],
+  );
+
+  const row = rows[0];
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    mediaId: row.media_id,
+    positionSeconds: row.position_seconds,
+    durationSeconds: row.duration_seconds,
+    watched: Boolean(row.watched),
+    lastWatchedAt: row.last_watched_at,
+  };
+}
+
+export async function saveWatchProgress(
+  mediaId: number,
+  positionSeconds: number,
+  durationSeconds: number,
+): Promise<void> {
+  const db = await getDatabase();
+
+  const watched =
+    durationSeconds > 0 &&
+    positionSeconds / durationSeconds >= 0.9;
+
+  await db.execute(
+    `
+      INSERT INTO watch_progress (
+        media_id,
+        position_seconds,
+        duration_seconds,
+        watched,
+        last_watched_at
+      )
+      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(media_id) DO UPDATE SET
+        position_seconds = excluded.position_seconds,
+        duration_seconds = excluded.duration_seconds,
+        watched = excluded.watched,
+        last_watched_at = CURRENT_TIMESTAMP
+    `,
+    [
+      mediaId,
+      positionSeconds,
+      durationSeconds,
+      Number(watched),
+    ],
+  );
+
+  window.dispatchEvent(
+    new Event("cinevault:progress-changed"),
+  );
+}
 export async function getMediaFiles(): Promise<MediaFile[]> {
   const db = await getDatabase();
 
   const rows = await db.select<MediaRow[]>(
     `
       SELECT
-        id,
-        library_folder_id,
-        series_id,
-        season_id,
-        path,
-        file_name,
-        title,
-        year,
-        media_type,
-        extension,
-        size,
-        season,
-        episode,
-        tmdb_id,
-        poster_path,
-        backdrop_path,
-        overview,
-        original_title,
-        release_date,
-        metadata_status,
-        metadata_attempts,
-        metadata_error,
-        episode_title,
-        episode_overview,
-        still_path,
-        air_date,
-        runtime,
-        episode_vote_average
-      FROM media
-      ORDER BY created_at DESC
+        m.id,
+        m.library_folder_id,
+        m.series_id,
+        m.season_id,
+        m.path,
+        m.file_name,
+        m.title,
+        m.year,
+        m.media_type,
+        m.extension,
+        m.size,
+        m.season,
+        m.episode,
+        m.tmdb_id,
+        m.poster_path,
+        m.backdrop_path,
+        m.overview,
+        m.original_title,
+        m.release_date,
+        m.metadata_status,
+        m.metadata_attempts,
+        m.metadata_error,
+        m.episode_title,
+        m.episode_overview,
+        m.still_path,
+        m.air_date,
+        m.runtime,
+        m.episode_vote_average,
+
+        wp.position_seconds AS watch_position,
+        wp.duration_seconds AS watch_duration,
+        wp.watched AS is_watched,
+        wp.last_watched_at
+
+      FROM media m
+      LEFT JOIN watch_progress wp
+        ON wp.media_id = m.id
+
+      ORDER BY m.created_at DESC
     `,
   );
+
   return rows.map((row) => ({
     id: row.id,
     libraryFolderId: row.library_folder_id,
@@ -171,6 +271,11 @@ export async function getMediaFiles(): Promise<MediaFile[]> {
     airDate: row.air_date,
     runtime: row.runtime,
     episodeVoteAverage: row.episode_vote_average,
+
+    watchPosition: row.watch_position ?? 0,
+    watchDuration: row.watch_duration ?? 0,
+    isWatched: Boolean(row.is_watched),
+    lastWatchedAt: row.last_watched_at,
   }));
 }
 
@@ -493,20 +598,53 @@ export async function syncSeriesFromEpisodes(): Promise<void> {
   const episodes = await getMediaFiles();
   const groups = new Map<string, MediaFile[]>();
 
+  function getSeriesTitle(episode: MediaFile): string {
+    const source = episode.name || episode.title;
+
+    const cleaned = source
+      .replace(/\.[^.]+$/, "")
+      .replace(/[._]+/g, " ")
+      .replace(
+        /\bS\d{1,2}\s*E\d{1,3}\b.*$/i,
+        "",
+      )
+      .replace(
+        /\b\d{1,2}x\d{1,3}\b.*$/i,
+        "",
+      )
+      .replace(
+        /\bE\d{1,3}\b.*$/i,
+        "",
+      )
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return cleaned || episode.title.trim();
+  }
+
   for (const episode of episodes) {
-    if (episode.mediaType !== "episode" || !episode.id) {
+    if (
+      episode.mediaType !== "episode" ||
+      !episode.id
+    ) {
       continue;
     }
 
-    const key = episode.title.trim().toLowerCase();
-    const group = groups.get(key) ?? [];
+    const seriesTitle = getSeriesTitle(episode);
+    const key = seriesTitle.toLowerCase();
 
-    group.push(episode);
+    const group = groups.get(key) ?? [];
+    group.push({
+      ...episode,
+      title: seriesTitle,
+    });
+
     groups.set(key, group);
   }
 
   for (const group of groups.values()) {
     const firstEpisode = group[0];
+    const seriesTitle = firstEpisode.title;
 
     let rows = await db.select<{ id: number }[]>(
       `
@@ -515,7 +653,7 @@ export async function syncSeriesFromEpisodes(): Promise<void> {
         WHERE LOWER(title) = LOWER(?)
         LIMIT 1
       `,
-      [firstEpisode.title],
+      [seriesTitle],
     );
 
     if (!rows[0]) {
@@ -524,7 +662,7 @@ export async function syncSeriesFromEpisodes(): Promise<void> {
           INSERT INTO series (title, year)
           VALUES (?, ?)
         `,
-        [firstEpisode.title, firstEpisode.year],
+        [seriesTitle, firstEpisode.year],
       );
 
       rows = await db.select<{ id: number }[]>(
@@ -535,7 +673,7 @@ export async function syncSeriesFromEpisodes(): Promise<void> {
           ORDER BY id DESC
           LIMIT 1
         `,
-        [firstEpisode.title],
+        [seriesTitle],
       );
     }
 
@@ -549,10 +687,16 @@ export async function syncSeriesFromEpisodes(): Promise<void> {
       await db.execute(
         `
           UPDATE media
-          SET series_id = ?
+          SET
+            series_id = ?,
+            title = ?
           WHERE id = ?
         `,
-        [seriesId, episode.id],
+        [
+          seriesId,
+          seriesTitle,
+          episode.id,
+        ],
       );
     }
   }
@@ -817,7 +961,11 @@ export async function getWatchlist(): Promise<WatchlistItem[]> {
       is_watched,
       linked_media_id,
       linked_series_id,
-      created_at
+      created_at,
+      user_rating,
+      review,
+      linked_path,
+      linked_kind
     FROM watchlist
     ORDER BY created_at DESC
   `);
@@ -836,6 +984,10 @@ export async function getWatchlist(): Promise<WatchlistItem[]> {
     linkedMediaId: row.linked_media_id,
     linkedSeriesId: row.linked_series_id,
     createdAt: row.created_at,
+    userRating: row.user_rating,
+    review: row.review,
+    linkedPath: row.linked_path,
+    linkedKind: row.linked_kind,
   }));
 }
 
@@ -865,6 +1017,104 @@ export async function deleteWatchlistItem(
   await db.execute(
     `
       DELETE FROM watchlist
+      WHERE id = ?
+    `,
+    [id],
+  );
+}
+
+export async function addWatchlistItem(
+  item: TmdbSearchItem,
+): Promise<void> {
+  const db = await getDatabase();
+
+  await db.execute(
+    `
+      INSERT INTO watchlist (
+        media_type,
+        tmdb_id,
+        title,
+        original_title,
+        year,
+        poster_path,
+        backdrop_path,
+        overview
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(media_type, tmdb_id) DO UPDATE SET
+        title = excluded.title,
+        original_title = excluded.original_title,
+        year = excluded.year,
+        poster_path = excluded.poster_path,
+        backdrop_path = excluded.backdrop_path,
+        overview = excluded.overview,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+    [
+      item.mediaType,
+      item.tmdbId,
+      item.title,
+      item.originalTitle,
+      item.year,
+      item.posterPath,
+      item.backdropPath,
+      item.overview,
+    ],
+  );
+}
+
+export async function saveWatchlistUserData(
+  id: number,
+  userRating: number | null,
+  review: string,
+): Promise<void> {
+  const db = await getDatabase();
+
+  await db.execute(
+    `
+      UPDATE watchlist
+      SET
+        user_rating = ?,
+        review = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `,
+    [userRating, review, id],
+  );
+}
+
+export async function linkWatchlistPath(
+  id: number,
+  path: string,
+  kind: "file" | "folder",
+): Promise<void> {
+  const db = await getDatabase();
+
+  await db.execute(
+    `
+      UPDATE watchlist
+      SET
+        linked_path = ?,
+        linked_kind = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `,
+    [path, kind, id],
+  );
+}
+
+export async function unlinkWatchlistPath(
+  id: number,
+): Promise<void> {
+  const db = await getDatabase();
+
+  await db.execute(
+    `
+      UPDATE watchlist
+      SET
+        linked_path = NULL,
+        linked_kind = NULL,
+        updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `,
     [id],

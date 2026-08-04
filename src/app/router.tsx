@@ -5,8 +5,14 @@ import { LibraryPage } from "../pages/LibraryPage";
 import { MediaDetailsPage } from "../pages/MediaDetailsPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { SeriesDetailsPage } from "../pages/SeriesDetailsPage";
+import { WatchlistDetailsPage } from "../pages/WatchlistDetailsPage";
+import { PlayerPage } from "../pages/PlayerPage";
 
 export const router = createBrowserRouter([
+  {
+    path: "/player",
+    element: <PlayerPage />,
+  },
   {
     element: <MainLayout />,
     children: [
@@ -23,12 +29,16 @@ export const router = createBrowserRouter([
         element: <MediaDetailsPage />,
       },
       {
-        path: "/settings",
-        element: <SettingsPage />,
-      },
-      {
         path: "/series/details",
         element: <SeriesDetailsPage />,
+      },
+      {
+        path: "/watchlist/details",
+        element: <WatchlistDetailsPage />,
+      },
+      {
+        path: "/settings",
+        element: <SettingsPage />,
       },
     ],
   },

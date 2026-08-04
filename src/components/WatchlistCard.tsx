@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import {
   Box,
   Button,
@@ -27,7 +28,15 @@ export function WatchlistCard({
   onChanged,
 }: WatchlistCardProps) {
   const [processing, setProcessing] = useState(false);
+  const navigate = useNavigate();
 
+  function openDetails() {
+    navigate("/watchlist/details", {
+      state: {
+        item,
+      },
+    });
+  }
   async function toggleWatched() {
     setProcessing(true);
 
@@ -66,7 +75,7 @@ export function WatchlistCard({
         },
       }}
     >
-      <CardActionArea>
+      <CardActionArea onClick={openDetails}>
         {item.posterPath ? (
           <Box
             component="img"

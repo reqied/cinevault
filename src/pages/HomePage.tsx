@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Alert,
   Box,
+  Button,
   CircularProgress,
   Typography,
 } from "@mui/material";
@@ -11,7 +12,8 @@ import {
   type HomeData,
 } from "../services/home";
 import { WatchlistCard } from "../components/WatchlistCard";
-
+import AddIcon from "@mui/icons-material/Add";
+import { AddWatchlistDialog } from "../components/AddWatchlistDialog";
 const emptyHomeData: HomeData = {
   recentlyAdded: [],
   movies: [],
@@ -24,7 +26,7 @@ export function HomePage() {
     useState<HomeData>(emptyHomeData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
+  const [watchlistDialogOpen, setWatchlistDialogOpen] = useState(false);
   const loadHome = useCallback(async () => {
     setError("");
 
@@ -62,20 +64,33 @@ export function HomePage() {
 
   return (
     <Box>
-      <Typography
-        variant="h4"
-        fontWeight={700}
-        sx={{ mb: 4 }}
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          mb: 4,
+        }}
       >
-        Главная
-      </Typography>
-
+        <Typography variant="h4" fontWeight={700}>
+          Главная
+        </Typography>
+  
+        <Button
+          variant="outlined"
+          startIcon={<AddIcon />}
+          onClick={() => setWatchlistDialogOpen(true)}
+        >
+          Хочу посмотреть
+        </Button>
+      </Box>
+  
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
         </Alert>
       )}
-
+  
       {loading ? (
         <Box
           sx={{
@@ -92,6 +107,7 @@ export function HomePage() {
             title="Недавно добавленные"
             items={data.recentlyAdded}
           />
+  
           {data.watchlist.length > 0 && (
             <Box sx={{ mb: 5 }}>
               <Typography
@@ -101,7 +117,7 @@ export function HomePage() {
               >
                 Хочу посмотреть
               </Typography>
-
+  
               <Box
                 sx={{
                   display: "flex",
@@ -120,16 +136,17 @@ export function HomePage() {
               </Box>
             </Box>
           )}
+  
           <MediaCarousel
             title="Фильмы"
             items={data.movies}
           />
-
+  
           <MediaCarousel
             title="Сериалы"
             items={data.series}
           />
-
+  
           {data.recentlyAdded.length === 0 && (
             <Typography color="text.secondary">
               Добавь папку с фильмами или сериалами.
@@ -137,6 +154,12 @@ export function HomePage() {
           )}
         </>
       )}
+  
+      <AddWatchlistDialog
+        open={watchlistDialogOpen}
+        onClose={() => setWatchlistDialogOpen(false)}
+        onAdded={() => void loadHome()}
+      />
     </Box>
   );
 }
