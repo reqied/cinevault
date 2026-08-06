@@ -537,6 +537,15 @@ pub fn run() {
             "#,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 12,
+            description: "add_movie_user_data",
+            sql: r#"
+                ALTER TABLE media ADD COLUMN user_rating INTEGER;
+                ALTER TABLE media ADD COLUMN review TEXT;
+            "#,
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

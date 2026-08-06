@@ -12,10 +12,10 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import CircularProgress from "@mui/material/CircularProgress";
 import { ArrowBack, PlayArrow } from "@mui/icons-material";
 import { useLocation, useNavigate } from "react-router";
 import { getEpisodeDetails } from "../services/tmdb";
+import { saveMovieUserData } from "../services/database";
 import type {
   EpisodeDetails,
   MediaFile,
@@ -33,12 +33,43 @@ const imageBaseUrl = "https://image.tmdb.org/t/p";
 export function MediaDetailsPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { file, series, episodes } = (location.state ?? {}) as LocationState;
+
+  const { file, series, episodes = [] } =
+    (location.state ?? {}) as LocationState;
 
   const [episodeDetails, setEpisodeDetails] =
     useState<EpisodeDetails | null>(null);
-  const [episodeLoading, setEpisodeLoading] = useState(false);
-  const [episodeError, setEpisodeError] = useState("");
+
+  const [episodeLoading, setEpisodeLoading] =
+    useState(false);
+
+  const [episodeError, setEpisodeError] =
+    useState("");
+
+  const [userRating, setUserRating] =
+    useState<number | null>(
+      file?.userRating ?? null,
+    );
+
+  const [review, setReview] = useState(
+    file?.review ?? "",
+  );
+
+  const [savingUserData, setSavingUserData] =
+    useState(false);
+
+  const [userDataSaved, setUserDataSaved] =
+    useState(false);
+
+  const [userDataError, setUserDataError] =
+    useState("");
+
+  useEffect(() => {
+    setUserRating(file?.userRating ?? null);
+    setReview(file?.review ?? "");
+    setUserDataSaved(false);
+    setUserDataError("");
+  }, [file?.id, file?.userRating, file?.review]);
 
   useEffect(() => {
     if (
@@ -47,6 +78,7 @@ export function MediaDetailsPage() {
       file.season === null ||
       file.episode === null
     ) {
+      setEpisodeDetails(null);
       return;
     }
 
@@ -58,9 +90,9 @@ export function MediaDetailsPage() {
 
       try {
         const details = await getEpisodeDetails(
-          series!.tmdbId!,
-          file!.season!,
-          file!.episode!,
+          series.tmdbId!,
+          file.season!,
+          file.episode!,
         );
 
         if (!cancelled) {
@@ -138,6 +170,33 @@ export function MediaDetailsPage() {
   const backdropUrl = backdropPath
     ? `${imageBaseUrl}/original${backdropPath}`
     : null;
+
+  async function handleSaveUserData() {
+    if (
+      file.mediaType !== "movie" ||
+      !file.id
+    ) {
+      return;
+    }
+
+    setSavingUserData(true);
+    setUserDataError("");
+    setUserDataSaved(false);
+
+    try {
+      await saveMovieUserData(
+        file.id,
+        userRating,
+        review,
+      );
+
+      setUserDataSaved(true);
+    } catch (value) {
+      setUserDataError(String(value));
+    } finally {
+      setSavingUserData(false);
+    }
+  }
 
   return (
     <Box>
@@ -221,7 +280,10 @@ export function MediaDetailsPage() {
           )}
 
           <Box>
-            <Typography variant="h3" fontWeight={700}>
+            <Typography
+              variant="h3"
+              fontWeight={700}
+            >
               {title}
             </Typography>
 
@@ -236,33 +298,60 @@ export function MediaDetailsPage() {
             >
               <Chip
                 label={
-                  file.mediaType === "movie" ? "Фильм" : "Сериал"
+                  file.mediaType === "movie"
+                    ? "Фильм"
+                    : "Сериал"
                 }
               />
 
-              {releaseYear && <Chip label={releaseYear} />}
+              {releaseYear && (
+                <Chip label={releaseYear} />
+              )}
 
-              <Chip label={file.extension.toUpperCase()} />
+              <Chip
+                label={file.extension.toUpperCase()}
+              />
+
+              {file.isWatched && (
+                <Chip
+                  label="Просмотрено"
+                  color="success"
+                />
+              )}
             </Stack>
 
             {file.mediaType === "episode" && (
               <>
-                <Typography variant="h5" sx={{ mb: 1 }}>
-                  {episodeLoading ? "Загрузка серии..." : episodeTitle}
+                <Typography
+                  variant="h5"
+                  sx={{ mb: 1 }}
+                >
+                  {episodeLoading
+                    ? "Загрузка серии..."
+                    : episodeTitle}
                 </Typography>
 
-                <Typography color="text.secondary" sx={{ mb: 2 }}>
-                  Сезон {file.season}, серия {file.episode}
+                <Typography
+                  color="text.secondary"
+                  sx={{ mb: 2 }}
+                >
+                  Сезон {file.season}, серия{" "}
+                  {file.episode}
+
                   {episodeDetails?.runtime
                     ? ` · ${episodeDetails.runtime} мин`
                     : ""}
+
                   {episodeDetails?.voteAverage != null
                     ? ` · TMDB ${episodeDetails.voteAverage.toFixed(1)}`
                     : ""}
                 </Typography>
 
                 {episodeError && (
-                  <Alert severity="warning" sx={{ mb: 2 }}>
+                  <Alert
+                    severity="warning"
+                    sx={{ mb: 2 }}
+                  >
                     Не удалось загрузить данные серии.
                   </Alert>
                 )}
@@ -299,38 +388,116 @@ export function MediaDetailsPage() {
       </Box>
 
       <Box sx={{ mt: 4 }}>
-        <Typography variant="h6" sx={{ mb: 2 }}>
+        <Typography
+          variant="h6"
+          sx={{ mb: 2 }}
+        >
           Настройки воспроизведения
         </Typography>
 
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-          <Select defaultValue="auto" sx={{ minWidth: 220 }}>
-            <MenuItem value="auto">Аудио: автоматически</MenuItem>
-            <MenuItem value="original">Оригинальная дорожка</MenuItem>
+        <Stack
+          direction={{
+            xs: "column",
+            sm: "row",
+          }}
+          spacing={2}
+        >
+          <Select
+            defaultValue="auto"
+            sx={{ minWidth: 220 }}
+          >
+            <MenuItem value="auto">
+              Аудио: автоматически
+            </MenuItem>
+
+            <MenuItem value="original">
+              Оригинальная дорожка
+            </MenuItem>
           </Select>
 
-          <Select defaultValue="off" sx={{ minWidth: 220 }}>
-            <MenuItem value="off">Субтитры выключены</MenuItem>
-            <MenuItem value="auto">Автоматический выбор</MenuItem>
+          <Select
+            defaultValue="off"
+            sx={{ minWidth: 220 }}
+          >
+            <MenuItem value="off">
+              Субтитры выключены
+            </MenuItem>
+
+            <MenuItem value="auto">
+              Автоматический выбор
+            </MenuItem>
           </Select>
         </Stack>
 
+        {file.mediaType === "movie" && (
+          <>
+            <Divider sx={{ my: 4 }} />
+
+            <Typography variant="h6">
+              Моя оценка
+            </Typography>
+
+            <Rating
+              max={10}
+              value={userRating}
+              onChange={(_, value) => {
+                setUserRating(value);
+                setUserDataSaved(false);
+              }}
+              sx={{ my: 2 }}
+            />
+
+            <TextField
+              label="Отзыв"
+              multiline
+              minRows={4}
+              fullWidth
+              value={review}
+              onChange={(event) => {
+                setReview(event.target.value);
+                setUserDataSaved(false);
+              }}
+            />
+
+            <Button
+              variant="contained"
+              disabled={savingUserData}
+              onClick={() =>
+                void handleSaveUserData()
+              }
+              sx={{ mt: 2 }}
+            >
+              {savingUserData
+                ? "Сохранение..."
+                : "Сохранить"}
+            </Button>
+
+            {userDataSaved && (
+              <Typography
+                color="success.main"
+                sx={{ mt: 1 }}
+              >
+                Сохранено
+              </Typography>
+            )}
+
+            {userDataError && (
+              <Alert
+                severity="error"
+                sx={{ mt: 2 }}
+              >
+                {userDataError}
+              </Alert>
+            )}
+          </>
+        )}
+
         <Divider sx={{ my: 4 }} />
 
-        <Typography variant="h6">Моя оценка</Typography>
-
-        <Rating sx={{ my: 2 }} max={10} />
-
-        <TextField
-          label="Отзыв"
-          multiline
-          minRows={4}
-          fullWidth
-        />
-
-        <Divider sx={{ my: 4 }} />
-
-        <Typography variant="body2" color="text.secondary">
+        <Typography
+          variant="body2"
+          color="text.secondary"
+        >
           {file.path}
         </Typography>
       </Box>

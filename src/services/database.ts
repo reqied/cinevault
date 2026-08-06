@@ -28,7 +28,7 @@ export async function saveMovieMetadata(
   metadata: MovieMetadata,
 ): Promise<void> {
   const db = await getDatabase();
-
+  
   await db.execute(
     `
       UPDATE media
@@ -979,6 +979,34 @@ export async function saveSeriesUserData(
       WHERE id = ?
     `,
     [userRating, review, seriesId],
+  );
+}
+
+export async function saveMovieUserData(
+  mediaId: number,
+  userRating: number | null,
+  review: string,
+): Promise<void> {
+  const db = await getDatabase();
+
+  await db.execute(
+    `
+      UPDATE media
+      SET
+        user_rating = ?,
+        review = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `,
+    [
+      userRating,
+      review.trim() || null,
+      mediaId,
+    ],
+  );
+
+  window.dispatchEvent(
+    new Event("cinevault:user-data-changed"),
   );
 }
 

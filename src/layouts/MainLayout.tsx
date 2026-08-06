@@ -10,6 +10,7 @@ import {
   Paper,
   Typography,
 } from "@mui/material";
+import BarChartIcon from "@mui/icons-material/BarChart";
 import {
   Favorite,
   Home,
@@ -125,12 +126,16 @@ export function MainLayout() {
             <ListItemText primary="Продолжить просмотр" />
           </ListItemButton>
 
-          <ListItemButton>
-            <ListItemIcon>
-              <Favorite />
-            </ListItemIcon>
-            <ListItemText primary="Избранное" />
-          </ListItemButton>
+          <ListItemButton
+          component={Link}
+          to="/statistics"
+        >
+          <ListItemIcon>
+            <BarChartIcon />
+          </ListItemIcon>
+
+          <ListItemText primary="Статистика" />
+        </ListItemButton>
         </List>
 
         <Divider sx={{ my: 2 }} />
