@@ -11,6 +11,7 @@ import {
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import FullscreenIcon from "@mui/icons-material/Fullscreen";
 import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
+import ListIcon from "@mui/icons-material/List";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useLocation, useNavigate } from "react-router";
 import {
@@ -26,6 +27,7 @@ import {
   saveWatchProgress,
 } from "../services/database";
 import type { MediaFile } from "../shared/types/media";
+import { EpisodeList } from "../components/player/EpisodeList";
 
 type LocationState = {
   file?: MediaFile;
@@ -117,6 +119,8 @@ export function PlayerPage() {
   const [controlsVisible, setControlsVisible] =
     useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [episodeListOpen, setEpisodeListOpen] =
+    useState(false);
 
   const [audioTracks, setAudioTracks] =
     useState<MpvTrack[]>([]);
@@ -141,6 +145,9 @@ export function PlayerPage() {
     useRef<MediaFile | undefined>(initialFile);
   const positionRef = useRef(0);
   const durationRef = useRef(0);
+  const pausedRef = useRef(false);
+  const volumeRef = useRef(100);
+  const fullscreenRef = useRef(false);
   const lastSavedPositionRef = useRef(0);
   const resumePositionRef = useRef(0);
   const resumeAppliedRef = useRef(false);
@@ -180,8 +187,9 @@ export function PlayerPage() {
     clearControlsTimer();
 
     if (
-      paused ||
+      pausedRef.current ||
       menuOpen ||
+      episodeListOpen ||
       loading ||
       nextEpisodeCountdown !== null
     ) {
@@ -245,6 +253,8 @@ export function PlayerPage() {
     setPosition(0);
     setDuration(0);
     setPaused(false);
+    pausedRef.current = false;
+
     setAudioTracks([]);
     setSubtitleTracks([]);
     setAudioId(null);
@@ -274,17 +284,19 @@ export function PlayerPage() {
     setError("");
     setNextEpisodeCountdown(null);
     setAutoPlayCancelled(false);
+    setEpisodeListOpen(false);
     showControls();
 
     await prepareResume(file);
+
+    currentFileRef.current = file;
+    setCurrentFile(file);
 
     await command("loadfile", [
       file.path,
       "replace",
     ]);
 
-    currentFileRef.current = file;
-    setCurrentFile(file);
     setLoading(false);
   }
 
@@ -312,30 +324,9 @@ export function PlayerPage() {
 
   async function togglePause() {
     try {
-      await setProperty("pause", !paused);
-      showControls();
-    } catch (value) {
-      setError(String(value));
-    }
-  }
-
-  async function seek(seconds: number) {
-    if (durationRef.current <= 0) {
-      return;
-    }
-
-    const nextPosition = Math.max(
-      0,
-      Math.min(
-        positionRef.current + seconds,
-        durationRef.current,
-      ),
-    );
-
-    try {
       await setProperty(
-        "time-pos",
-        nextPosition,
+        "pause",
+        !pausedRef.current,
       );
       showControls();
     } catch (value) {
@@ -343,8 +334,32 @@ export function PlayerPage() {
     }
   }
 
+  async function seek(seconds: number) {
+    if (
+      durationRef.current <= 0 ||
+      !playerStarted
+    ) {
+      return;
+    }
+
+    try {
+      await command("seek", [
+        seconds,
+        "relative",
+        "exact",
+      ]);
+      showControls();
+    } catch (value) {
+      console.error("Seek failed:", value);
+      setError(String(value));
+    }
+  }
+
   async function seekTo(value: number) {
-    if (durationRef.current <= 0) {
+    if (
+      durationRef.current <= 0 ||
+      !playerStarted
+    ) {
       return;
     }
 
@@ -354,12 +369,14 @@ export function PlayerPage() {
     );
 
     try {
-      await setProperty(
-        "time-pos",
+      await command("seek", [
         nextPosition,
-      );
+        "absolute",
+        "exact",
+      ]);
       showControls();
     } catch (value) {
+      console.error("Seek failed:", value);
       setError(String(value));
     }
   }
@@ -370,6 +387,7 @@ export function PlayerPage() {
       Math.min(value, 100),
     );
 
+    volumeRef.current = nextVolume;
     setVolume(nextVolume);
 
     try {
@@ -386,12 +404,14 @@ export function PlayerPage() {
   async function toggleFullscreen() {
     try {
       const currentWindow = getCurrentWindow();
-      const nextValue = !fullscreen;
+      const nextValue =
+        !fullscreenRef.current;
 
       await currentWindow.setFullscreen(
         nextValue,
       );
 
+      fullscreenRef.current = nextValue;
       setFullscreen(nextValue);
       showControls();
     } catch (value) {
@@ -430,13 +450,13 @@ export function PlayerPage() {
     }
 
     destroyingRef.current = true;
-    playerStarted = false;
-    playerStarting = false;
 
     try {
       await saveCurrentProgress();
       await destroy();
     } finally {
+      playerStarted = false;
+      playerStarting = false;
       destroyingRef.current = false;
     }
   }
@@ -477,6 +497,9 @@ export function PlayerPage() {
           "--hwdec=auto-safe",
           "--keep-open=yes",
           "--force-window",
+          "--osc=no",
+          "--input-default-bindings=no",
+          "--input-vo-keyboard=no",
         ],
         observedProperties,
         ipcTimeoutMs: 3000,
@@ -511,8 +534,13 @@ export function PlayerPage() {
                     track.type === "sub",
                 );
 
-              setAudioTracks(nextAudioTracks);
-              setSubtitleTracks(nextSubtitleTracks);
+              setAudioTracks(
+                nextAudioTracks,
+              );
+
+              setSubtitleTracks(
+                nextSubtitleTracks,
+              );
 
               const selectedAudio =
                 nextAudioTracks.find(
@@ -580,10 +608,11 @@ export function PlayerPage() {
 
                 setPosition(resumePosition);
 
-                void setProperty(
-                  "time-pos",
+                void command("seek", [
                   resumePosition,
-                ).catch((value) => {
+                  "absolute",
+                  "exact",
+                ]).catch((value) => {
                   console.error(
                     "Resume failed:",
                     value,
@@ -596,6 +625,7 @@ export function PlayerPage() {
               name === "pause" &&
               typeof data === "boolean"
             ) {
+              pausedRef.current = data;
               setPaused(data);
             }
 
@@ -603,6 +633,7 @@ export function PlayerPage() {
               name === "volume" &&
               typeof data === "number"
             ) {
+              volumeRef.current = data;
               setVolume(data);
             }
           },
@@ -647,8 +678,6 @@ export function PlayerPage() {
       }
 
       destroyingRef.current = true;
-      playerStarted = false;
-      playerStarting = false;
 
       void (async () => {
         try {
@@ -660,6 +689,8 @@ export function PlayerPage() {
             value,
           );
         } finally {
+          playerStarted = false;
+          playerStarting = false;
           destroyingRef.current = false;
         }
       })();
@@ -674,7 +705,9 @@ export function PlayerPage() {
         event.target instanceof
           HTMLInputElement ||
         event.target instanceof
-          HTMLTextAreaElement
+          HTMLTextAreaElement ||
+        event.target instanceof
+          HTMLSelectElement
       ) {
         return;
       }
@@ -688,29 +721,40 @@ export function PlayerPage() {
           break;
 
         case "ArrowLeft":
+          event.preventDefault();
           void seek(-10);
           break;
 
         case "ArrowRight":
+          event.preventDefault();
           void seek(10);
           break;
 
         case "ArrowUp":
           event.preventDefault();
-          void changeVolume(volume + 5);
+          void changeVolume(
+            volumeRef.current + 5,
+          );
           break;
 
         case "ArrowDown":
           event.preventDefault();
-          void changeVolume(volume - 5);
+          void changeVolume(
+            volumeRef.current - 5,
+          );
           break;
 
         case "KeyF":
+          event.preventDefault();
           void toggleFullscreen();
           break;
 
         case "Escape":
-          if (fullscreen) {
+          if (episodeListOpen) {
+            setEpisodeListOpen(false);
+          } else if (
+            fullscreenRef.current
+          ) {
             void toggleFullscreen();
           }
           break;
@@ -729,10 +773,8 @@ export function PlayerPage() {
       );
     };
   }, [
-    paused,
-    volume,
-    fullscreen,
     menuOpen,
+    episodeListOpen,
     loading,
     nextEpisodeCountdown,
   ]);
@@ -741,6 +783,7 @@ export function PlayerPage() {
     if (
       paused ||
       menuOpen ||
+      episodeListOpen ||
       loading ||
       nextEpisodeCountdown !== null
     ) {
@@ -755,6 +798,7 @@ export function PlayerPage() {
   }, [
     paused,
     menuOpen,
+    episodeListOpen,
     loading,
     nextEpisodeCountdown,
   ]);
@@ -767,7 +811,6 @@ export function PlayerPage() {
     const timer = window.setInterval(() => {
       const currentPosition =
         positionRef.current;
-
       const currentDuration =
         durationRef.current;
 
@@ -859,8 +902,10 @@ export function PlayerPage() {
   return (
     <Box
       onMouseMove={showControls}
-      onMouseDown={handleSurfaceClick}
-      onDoubleClick={handleSurfaceDoubleClick}
+      onClick={handleSurfaceClick}
+      onDoubleClick={
+        handleSurfaceDoubleClick
+      }
       sx={{
         position: "fixed",
         inset: 0,
@@ -873,7 +918,7 @@ export function PlayerPage() {
       }}
     >
       <Box
-        onMouseDown={(event) =>
+        onClick={(event) =>
           event.stopPropagation()
         }
         onDoubleClick={(event) =>
@@ -917,7 +962,7 @@ export function PlayerPage() {
       {error && (
         <Alert
           severity="error"
-          onMouseDown={(event) =>
+          onClick={(event) =>
             event.stopPropagation()
           }
           sx={{
@@ -925,12 +970,25 @@ export function PlayerPage() {
             top: 80,
             left: 24,
             right: 24,
-            zIndex: 130,
+            zIndex: 150,
           }}
         >
           {error}
         </Alert>
       )}
+
+      <EpisodeList
+        open={episodeListOpen}
+        episodes={episodes}
+        currentEpisode={currentFile}
+        onClose={() => {
+          setEpisodeListOpen(false);
+        }}
+        onEpisodeSelect={(episode) => {
+          setEpisodeListOpen(false);
+          void switchEpisode(episode);
+        }}
+      />
 
       {loading && (
         <Box
@@ -951,7 +1009,7 @@ export function PlayerPage() {
       {nextEpisodeCountdown !== null &&
         nextEpisode && (
           <Box
-            onMouseDown={(event) =>
+            onClick={(event) =>
               event.stopPropagation()
             }
             onDoubleClick={(event) =>
@@ -1022,7 +1080,7 @@ export function PlayerPage() {
         )}
 
       <Box
-        onMouseDown={(event) =>
+        onClick={(event) =>
           event.stopPropagation()
         }
         onDoubleClick={(event) =>
@@ -1113,6 +1171,19 @@ export function PlayerPage() {
               }
             >
               Следующая серия
+            </Button>
+          )}
+
+          {episodes.length > 0 && (
+            <Button
+              startIcon={<ListIcon />}
+              onClick={() => {
+                setEpisodeListOpen(true);
+                setControlsVisible(true);
+                clearControlsTimer();
+              }}
+            >
+              Серии
             </Button>
           )}
 

@@ -75,6 +75,9 @@ export type MediaFile = {
   watchDuration?: number;
   isWatched?: boolean;
   lastWatchedAt?: string | null;
+  seriesId?: number | null;
+  userRating?: number | null;
+  review?: string | null;
 };
 
 export type MovieMetadata = {
@@ -118,6 +121,8 @@ export type MediaRow = {
   watch_duration: number | null;
   is_watched: number | null;
   last_watched_at: string | null;
+  user_rating: number | null;
+  review: string | null;
 };
 
 export type EpisodeMetadata = {

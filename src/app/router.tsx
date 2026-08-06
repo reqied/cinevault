@@ -7,6 +7,7 @@ import { SettingsPage } from "../pages/SettingsPage";
 import { SeriesDetailsPage } from "../pages/SeriesDetailsPage";
 import { WatchlistDetailsPage } from "../pages/WatchlistDetailsPage";
 import { PlayerPage } from "../pages/PlayerPage";
+import { SearchPage } from "../pages/SearchPage";
 
 export const router = createBrowserRouter([
   {
@@ -23,6 +24,10 @@ export const router = createBrowserRouter([
       {
         path: "/library",
         element: <LibraryPage />,
+      },
+      {
+        path: "/search",
+        element: <SearchPage />,
       },
       {
         path: "/media/details",

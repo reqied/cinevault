@@ -19,15 +19,65 @@ import {
   Settings,
   WatchLater,
 } from "@mui/icons-material";
-import { Link, Outlet } from "react-router";
+import {
+  FormEvent,
+  useEffect,
+  useState,
+} from "react";
+import {
+  Link,
+  Outlet,
+  useLocation,
+  useNavigate,
+} from "react-router";
 
 const sidebarWidth = 240;
 
 export function MainLayout() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    if (location.pathname !== "/search") {
+      return;
+    }
+
+    const params = new URLSearchParams(
+      location.search,
+    );
+
+    setQuery(params.get("q") ?? "");
+  }, [location.pathname, location.search]);
+
+  function handleSearch(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+
+    const trimmedQuery = query.trim();
+
+    if (!trimmedQuery) {
+      navigate("/search");
+      return;
+    }
+
+    navigate(
+      `/search?q=${encodeURIComponent(
+        trimmedQuery,
+      )}`,
+    );
+  }
+
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh",
-      bgcolor: "background.default",
-   }}>
+    <Box
+      sx={{
+        display: "flex",
+        minHeight: "100vh",
+        bgcolor: "background.default",
+      }}
+    >
       <Box
         component="aside"
         sx={{
@@ -39,9 +89,14 @@ export function MainLayout() {
           borderRight: "1px solid",
           borderColor: "divider",
           p: 2,
+          zIndex: 20,
         }}
       >
-        <Typography variant="h5" fontWeight={700} sx={{ mb: 3 }}>
+        <Typography
+          variant="h5"
+          fontWeight={700}
+          sx={{ mb: 3 }}
+        >
           CineVault
         </Typography>
 
@@ -53,7 +108,10 @@ export function MainLayout() {
             <ListItemText primary="Главная" />
           </ListItemButton>
 
-          <ListItemButton component={Link} to="/library">
+          <ListItemButton
+            component={Link}
+            to="/library"
+          >
             <ListItemIcon>
               <LocalMovies />
             </ListItemIcon>
@@ -77,7 +135,10 @@ export function MainLayout() {
 
         <Divider sx={{ my: 2 }} />
 
-        <ListItemButton component={Link} to="/settings">
+        <ListItemButton
+          component={Link}
+          to="/settings"
+        >
           <ListItemIcon>
             <Settings />
           </ListItemIcon>
@@ -85,7 +146,12 @@ export function MainLayout() {
         </ListItemButton>
       </Box>
 
-      <Box sx={{ ml: `${sidebarWidth}px`, width: "100%" }}>
+      <Box
+        sx={{
+          ml: `${sidebarWidth}px`,
+          width: `calc(100% - ${sidebarWidth}px)`,
+        }}
+      >
         <Box
           component="header"
           sx={{
@@ -107,6 +173,8 @@ export function MainLayout() {
           </IconButton>
 
           <Paper
+            component="form"
+            onSubmit={handleSearch}
             sx={{
               display: "flex",
               alignItems: "center",
@@ -116,9 +184,17 @@ export function MainLayout() {
             }}
           >
             <Search />
+
             <InputBase
-              placeholder="Поиск фильмов и сериалов"
-              sx={{ ml: 1, flex: 1 }}
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+              }}
+              placeholder="Поиск фильмов, сериалов и серий"
+              sx={{
+                ml: 1,
+                flex: 1,
+              }}
             />
           </Paper>
         </Box>

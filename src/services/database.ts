@@ -154,7 +154,124 @@ export async function getWatchProgress(
     lastWatchedAt: row.last_watched_at,
   };
 }
+export type SeasonProgress = {
+  season: number;
+  totalEpisodes: number;
+  watchedEpisodes: number;
+  progress: number;
+  isWatched: boolean;
+};
 
+export type SeriesProgress = {
+  totalEpisodes: number;
+  watchedEpisodes: number;
+  progress: number;
+  isWatched: boolean;
+  seasons: SeasonProgress[];
+};
+
+export async function getSeriesProgress(
+  seriesId: number,
+): Promise<SeriesProgress> {
+  const db = await getDatabase();
+
+  const rows = await db.select<
+    {
+      season: number | null;
+      is_watched: number | null;
+      position_seconds: number | null;
+      duration_seconds: number | null;
+    }[]
+  >(
+    `
+      SELECT
+        m.season,
+        wp.watched AS is_watched,
+        wp.position_seconds,
+        wp.duration_seconds
+      FROM media m
+      LEFT JOIN watch_progress wp
+        ON wp.media_id = m.id
+      WHERE m.series_id = ?
+        AND m.media_type = 'episode'
+      ORDER BY m.season, m.episode
+    `,
+    [seriesId],
+  );
+
+  const seasonsMap = new Map<
+    number,
+    {
+      totalEpisodes: number;
+      watchedEpisodes: number;
+      progressSum: number;
+    }
+  >();
+
+  let watchedEpisodes = 0;
+  let progressSum = 0;
+
+  for (const row of rows) {
+    const season = row.season ?? 0;
+    const watched = Boolean(row.is_watched);
+
+    const episodeProgress = watched
+      ? 100
+      : row.duration_seconds && row.duration_seconds > 0
+        ? Math.min(
+            100,
+            ((row.position_seconds ?? 0) /
+              row.duration_seconds) *
+              100,
+          )
+        : 0;
+
+    const current = seasonsMap.get(season) ?? {
+      totalEpisodes: 0,
+      watchedEpisodes: 0,
+      progressSum: 0,
+    };
+
+    current.totalEpisodes += 1;
+    current.progressSum += episodeProgress;
+
+    if (watched) {
+      current.watchedEpisodes += 1;
+      watchedEpisodes += 1;
+    }
+
+    progressSum += episodeProgress;
+    seasonsMap.set(season, current);
+  }
+
+  const seasons = [...seasonsMap.entries()]
+    .map(([season, data]) => ({
+      season,
+      totalEpisodes: data.totalEpisodes,
+      watchedEpisodes: data.watchedEpisodes,
+      progress:
+        data.totalEpisodes > 0
+          ? data.progressSum / data.totalEpisodes
+          : 0,
+      isWatched:
+        data.totalEpisodes > 0 &&
+        data.watchedEpisodes === data.totalEpisodes,
+    }))
+    .sort((left, right) => left.season - right.season);
+
+  return {
+    totalEpisodes: rows.length,
+    watchedEpisodes,
+    progress:
+      rows.length > 0
+        ? progressSum / rows.length
+        : 0,
+    isWatched:
+      rows.length > 0 &&
+      watchedEpisodes === rows.length,
+    seasons,
+  };
+}
 export async function saveWatchProgress(
   mediaId: number,
   positionSeconds: number,
@@ -228,6 +345,8 @@ export async function getMediaFiles(): Promise<MediaFile[]> {
         m.air_date,
         m.runtime,
         m.episode_vote_average,
+        m.user_rating,
+        m.review,
 
         wp.position_seconds AS watch_position,
         wp.duration_seconds AS watch_duration,
@@ -271,7 +390,8 @@ export async function getMediaFiles(): Promise<MediaFile[]> {
     airDate: row.air_date,
     runtime: row.runtime,
     episodeVoteAverage: row.episode_vote_average,
-
+    userRating: row.user_rating,
+    review: row.review,
     watchPosition: row.watch_position ?? 0,
     watchDuration: row.watch_duration ?? 0,
     isWatched: Boolean(row.is_watched),

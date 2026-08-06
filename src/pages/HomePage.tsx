@@ -17,11 +17,13 @@ import { AddWatchlistDialog } from "../components/AddWatchlistDialog";
 import { ContinueWatchingCard } from "../components/ContinueWatchingCard";
 
 const emptyHomeData: HomeData = {
+  continueWatching: [],
   recentlyAdded: [],
+  recentlyWatched: [],
+  watched: [],
   movies: [],
   series: [],
   watchlist: [],
-  continueWatching: [],
 };
 
 export function HomePage() {
@@ -193,7 +195,15 @@ export function HomePage() {
             title="Сериалы"
             items={data.series}
           />
-  
+          <MediaCarousel
+            title="Недавно просмотренные"
+            items={data.recentlyWatched}
+          />
+
+          <MediaCarousel
+            title="Просмотренные"
+            items={data.watched}
+          />
           {data.recentlyAdded.length === 0 && (
             <Typography color="text.secondary">
               Добавь папку с фильмами или сериалами.
