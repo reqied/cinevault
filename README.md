@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="src/assets/logo.svg" alt="CineVault logo" width="180">
+  <img src="src/assets/logo.svg" alt="CineVault logo пока нет))" width="180">
 </p>
 
 # CineVault
